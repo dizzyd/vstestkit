@@ -1,4 +1,6 @@
+using System;
 using Vintagestory.API.Common;
+using Vintagestory.GameContent;
 using Vintagestory.API.Server;
 
 namespace VsTestkit
@@ -27,6 +29,40 @@ namespace VsTestkit
             // PlayerCreate covers a brand new player, PlayerJoin an existing one.
             sapi.Event.PlayerCreate += MarkCharacterChosen;
             sapi.Event.PlayerJoin += MarkCharacterChosen;
+
+            // After the weather system exists.
+            sapi.Event.ServerRunPhase(EnumServerRunPhase.RunGame, () => StopTheWeather(sapi));
+        }
+
+        /// <summary>
+        /// Turns precipitation off, unless VSTK_WEATHER=1.
+        ///
+        /// Rain is not background scenery in a test: sky-exposed farmland pulls in
+        /// every hour of precipitation since its last update
+        /// (BlockEntitySoilNutrition.updateMoistureLevel walks back through them),
+        /// so advancing the calendar wets soil whether or not anything the test
+        /// did was responsible. A moisture assertion then passes or fails on
+        /// simulated weather, which is a miserable thing to debug.
+        ///
+        /// Set VSTK_WEATHER=1 when the weather is the thing under test.
+        /// </summary>
+        static void StopTheWeather(ICoreServerAPI sapi)
+        {
+            if (Environment.GetEnvironmentVariable("VSTK_WEATHER") == "1")
+            {
+                Hub.Logger?.Notification("[vstestkit] leaving weather enabled (VSTK_WEATHER=1)");
+                return;
+            }
+
+            var weather = sapi.ModLoader.GetModSystem<WeatherSystemServer>();
+            if (weather == null)
+            {
+                Hub.Logger?.Notification("[vstestkit] no weather system loaded; nothing to disable");
+                return;
+            }
+
+            weather.OverridePrecipitation = 0f;
+            Hub.Logger?.Notification("[vstestkit] precipitation forced to 0 (VSTK_WEATHER=1 to allow rain)");
         }
 
         static void MarkCharacterChosen(IServerPlayer player)

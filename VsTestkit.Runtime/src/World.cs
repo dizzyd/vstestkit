@@ -134,15 +134,22 @@ namespace VsTestkit.Testing
         /// Writing a block into an unloaded chunk succeeds silently and reads back
         /// as air, so anything that builds must load first.
         /// </summary>
-        public static Task LoadArea(BlockPos min, BlockPos max, bool keepLoaded = true)
+        public static Task LoadArea(BlockPos min, BlockPos max, bool keepLoaded = true, int chunkMargin = 1)
         {
             var sapi = Vs.RequireServer();
             var size = sapi.WorldManager.ChunkSize;
 
-            var cx1 = Math.Min(min.X, max.X) / size;
-            var cx2 = Math.Max(min.X, max.X) / size;
-            var cz1 = Math.Min(min.Z, max.Z) / size;
-            var cz2 = Math.Max(min.Z, max.Z) / size;
+            // The margin is not padding for its own sake. A great deal of mod
+            // code - and vanilla farmland, which is where the idiom comes from -
+            // guards its tick with IsFullyLoadedChunk, and that is
+            // ServerChunk.NotAtEdge, which requires NeighboursLoaded == 511:
+            // all eight surrounding chunk columns present. Load only the columns
+            // the plot sits in and such code never runs at all, silently, and the
+            // test reads as "the mod does nothing".
+            var cx1 = Math.Min(min.X, max.X) / size - chunkMargin;
+            var cx2 = Math.Max(min.X, max.X) / size + chunkMargin;
+            var cz1 = Math.Min(min.Z, max.Z) / size - chunkMargin;
+            var cz2 = Math.Max(min.Z, max.Z) / size + chunkMargin;
 
             var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             sapi.WorldManager.LoadChunkColumnPriority(cx1, cz1, cx2, cz2, new Vintagestory.API.Server.ChunkLoadOptions
@@ -151,6 +158,25 @@ namespace VsTestkit.Testing
                 OnLoaded = () => tcs.TrySetResult(null)
             });
             return tcs.Task;
+        }
+
+        // ---------- weather ----------
+
+        /// <summary>
+        /// Forces precipitation to a fixed value, or null to hand it back to the
+        /// weather simulation.
+        ///
+        /// The harness pins this to 0 at startup, because sky-exposed farmland
+        /// accumulates every hour of rain since its last update and would
+        /// otherwise moisten on its own whenever a test advances the calendar.
+        /// Set it deliberately when rain is what you are testing.
+        /// </summary>
+        public static void SetPrecipitation(float? level)
+        {
+            var sapi = Vs.RequireServer();
+            var weather = sapi.ModLoader.GetModSystem<Vintagestory.GameContent.WeatherSystemServer>();
+            if (weather == null) throw new AssertionException("no weather system is loaded");
+            weather.OverridePrecipitation = level;
         }
 
         // ---------- helpers ----------

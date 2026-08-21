@@ -220,6 +220,16 @@ bash scripts/vstk raw tests.load '{"path": ".../mine.dll"}'
 bash scripts/vstk raw tests.run  '{"filter": "TheOneImFixing"}'
 ```
 
+## A worked example
+
+`../olla/tests` is a real suite against a real mod — including a test that calls
+the protected method olla's Harmony patch postfixes, which is exactly the kind of
+thing that survives a game update by compiling and doing nothing.
+
+```bash
+bash scripts/run.sh ../olla/tests --mod ../olla/olla
+```
+
 ## Testing a mod that adds content
 
 Mods in this workspace build code into `bin/<config>/Mods` but leave assets in the

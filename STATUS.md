@@ -8,7 +8,7 @@ Build order from the design (`TESTKIT-DESIGN.md` in the anego-1.22 workspace):
       `[VsTest]` runner, report, server-side helpers, per-test plots.
 - [x] **3. Client tier** — client-side attach, the `ClientMain` input adapter,
       `Interact`, `Gui`, `Input`, `Shot`.
-- [ ] **4. Skill + proof** — the `vintagestory-test` skill and a real suite for one mod.
+- [x] **4. Skill + proof** — the `vintagestory-test` skill and a real suite for olla.
 - [ ] **5. Pixel baselines** — keyed by platform + `GL_RENDERER`, once a Linux box
       reports one.
 
@@ -68,6 +68,40 @@ preparation closes open dialogs first; and `caffeinate` keeps the display awake
 for the session, since GLFW refuses to open a window without a monitor and a
 slept screen otherwise kills the next boot.
 
+## Verified working (step 4)
+
+`~/.claude/skills/vintagestory-test` documents the workflow, and `olla/tests` is a
+real suite against a real mod: **7 passed**, on macOS and on the Linux box, one
+command.
+
+```bash
+bash scripts/run.sh ../olla/tests --mod ../olla/olla
+```
+
+The suite covers the mod's behaviour (buried + watered olla moistens adjacent
+farmland, consumes water, does nothing unburied or empty, respects its 5x5) and,
+most usefully, calls the protected method the mod's Harmony patch postfixes. That
+patch names `BlockEntitySoilNutrition.GetNearbyWaterDistance`, which is where the
+method moved in 1.22 — aim it at a method that is not there and it attaches to
+nothing, compiles, and silently does nothing. That is the failure this whole
+harness exists to catch, and there is now a test for it.
+
+Writing it against a real mod found two harness bugs that the self-tests could
+not have:
+
+- **Plots did not load their neighbouring chunk columns.** `IsFullyLoadedChunk` is
+  `ServerChunk.NotAtEdge`, which requires `NeighboursLoaded == 511` — all eight.
+  Vanilla farmland guards its tick that way and mods copy the idiom, so olla's
+  block entity never ticked at all and the mod read as inert. `World.LoadArea`
+  now takes a one-chunk margin.
+- **Weather made moisture tests meaningless.** Sky-exposed farmland pulls in every
+  hour of rain since its last update, so advancing the calendar wet the soil
+  whatever the test did — including farmland deliberately placed out of range.
+  Precipitation is now pinned to 0 unless `VSTK_WEATHER=1`.
+
+Both were invisible in the self-tests, which never advance the calendar against a
+block entity. Three of the seven olla tests would have passed vacuously.
+
 ## Notes for later steps
 
 - **Screenshots do not land in the data path.** `GamePaths.Screenshots` is
@@ -84,6 +118,10 @@ slept screen otherwise kills the next boot.
   the chest dialog is `Vintagestory.API.Client.GuiDialogBlockEntityInventory`,
   and `Vintagestory.GameContent` has a different one. A stray `using` binds the
   wrong type and `OfType<T>` matches nothing. `Gui` now says so explicitly.
+- A block entity on a tick listener that works from `Calendar.TotalHours` deltas
+  needs one firing to take a baseline and a second to act, so a test has to
+  advance the calendar *between* two firings. Olla's listener is 5s, which is why
+  its tests take ~15s each.
 - `--addModPath` and `--addOrigin` are CommandLineParser *sequence* options: one
   flag, many values. Repeating the flag is a parse error, and the server reports
   it as a bare `NullReferenceException` in `ServerProgram..ctor` because nothing
