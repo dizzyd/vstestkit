@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace VsTestkit.Testing
 {
@@ -95,6 +96,27 @@ namespace VsTestkit.Testing
         public static TException Throws<TException>(Action action, string what = null) where TException : Exception
         {
             try { action(); }
+            catch (TException e) { return e; }
+            catch (Exception e)
+            {
+                throw new AssertionException(
+                    Prefix(what) + $"expected {typeof(TException).Name}, got {e.GetType().Name}: {e.Message}");
+            }
+            throw new AssertionException(Prefix(what) + $"expected {typeof(TException).Name}, nothing was thrown");
+        }
+
+        /// <summary>
+        /// Asserts an async operation throws, and returns the exception.
+        ///
+        /// Always use this rather than Throws(() => something.GetAwaiter()
+        /// .GetResult()). Blocking on a task from a test body deadlocks: the body
+        /// runs on a game main thread, and the continuation it is waiting for has
+        /// to be posted to that same thread.
+        /// </summary>
+        public static async Task<TException> ThrowsAsync<TException>(Func<Task> action, string what = null)
+            where TException : Exception
+        {
+            try { await action(); }
             catch (TException e) { return e; }
             catch (Exception e)
             {

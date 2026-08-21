@@ -26,7 +26,7 @@ namespace VsTestkit.Testing
         public static GameThreadContext ClientCtx { get; private set; }
 
         /// <summary>The plot allocated to the running test.</summary>
-        public static Plot Plot { get; internal set; }
+        public static TestPlot Plot { get; internal set; }
 
         // ---------- wiring, called by the testkit mod ----------
 

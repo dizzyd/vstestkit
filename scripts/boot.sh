@@ -88,6 +88,15 @@ fi
 if [ "$MODE" = "client" ]; then
     CLIENT="$(vs_client_cmd)"
 
+    # The client needs a real, awake display: GLFW asks for the primary monitor
+    # and refuses to open a window without one, so a screen that slept part way
+    # through a long run kills the next boot. -u declares user activity, which
+    # wakes it; the -d assertion below then holds it awake for the session.
+    if [ "$(uname)" = "Darwin" ] && command -v caffeinate >/dev/null 2>&1; then
+        caffeinate -u -t 1 >/dev/null 2>&1 || true
+        sleep 1
+    fi
+
     # Run the test client OFFLINE, so it never touches your real login.
     #
     # On startup the client checks the cached session key locally (an RSA
@@ -134,6 +143,13 @@ fi
 echo $! > "$VSTK_RUN/server.pid"
 PID="$(cat "$VSTK_RUN/server.pid")"
 
+# Hold the display awake for as long as the game lives. Tied to the pid rather
+# than wrapping the launch, so stop.sh still owns the process directly and the
+# assertion goes away on its own when the game exits.
+if [ "$MODE" = "client" ] && [ "$(uname)" = "Darwin" ] && command -v caffeinate >/dev/null 2>&1; then
+    caffeinate -d -w "$PID" >/dev/null 2>&1 &
+fi
+
 # The client tier needs both sides attached. The handshake is written when the
 # first side comes up and rewritten when the second joins, so waiting for the
 # file alone would return before the client is usable.
@@ -170,6 +186,16 @@ for i in $(seq 1 "$TIMEOUT"); do
             echo "     waits at the login screen instead of timing out; sign in there and" >&2
             echo "     scripts/stop.sh saves the session to run/session.json for every" >&2
             echo "     later run." >&2
+            exit 1
+        fi
+
+        if grep -q "GetPrimaryMonitor" "$VSTK_RUN/server.out" 2>/dev/null; then
+            echo "the client could not find a monitor, so GLFW refused to open a window." >&2
+            echo >&2
+            echo "This is a real display being unavailable - a locked or sleeping screen," >&2
+            echo "or a relaunch before the previous window finished closing. Wake the" >&2
+            echo "display and try again. The client tier needs a real one; there is no" >&2
+            echo "offscreen mode on macOS." >&2
             exit 1
         fi
 

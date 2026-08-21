@@ -143,9 +143,11 @@ namespace VsTestkit.SelfTest
 
         [VsTest]
         [RequiresClient]
-        public async Task SkippedWithoutAClient()
+        public async Task NeedsAClient()
         {
-            Assert.Fail("should have been skipped on a headless run");
+            // Skipped on a headless run rather than failed; see ClientTests for
+            // the client tier proper.
+            Assert.NotNull(Capi, "client API");
             await Task.CompletedTask;
         }
 

@@ -15,7 +15,8 @@ cfg["Upnp"] = False
 cfg["VerifyPlayerAuth"] = False
 cfg["MaxClients"] = 4
 cfg["ServerName"] = "vstestkit"
-cfg["WelcomeMessage"] = ""
+# Left as generated: an empty welcome message is still broadcast, and an empty
+# chat line is a confusing thing to see in a test log.
 cfg["Password"] = ""
 # Headless runs have no players connected, and block ticks that only run while
 # someone is watching would make results depend on whether a client attached.

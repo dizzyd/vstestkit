@@ -11,7 +11,7 @@ namespace VsTestkit.Testing
     /// cleared before it runs, far enough from its neighbours that nothing leaks
     /// across.
     /// </summary>
-    public class Plot
+    public class TestPlot
     {
         /// <summary>Ground block of the plot. P(0,0,0) is exactly this.</summary>
         public BlockPos Origin { get; }
@@ -20,7 +20,7 @@ namespace VsTestkit.Testing
         public int Height { get; }
         public int Index { get; }
 
-        public Plot(BlockPos origin, int size, int height, int index)
+        public TestPlot(BlockPos origin, int size, int height, int index)
         {
             Origin = origin;
             Size = size;
