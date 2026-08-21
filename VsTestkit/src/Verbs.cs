@@ -31,10 +31,12 @@ namespace VsTestkit
                 case "tests.list": return TestVerbs.List();
                 case "tests.run":  return TestVerbs.Run(args);
 
+                case "session.save": return SessionVerbs.Save(args);
+
                 default:
                     throw new VerbException(
                         $"unknown verb '{verb}'. known: ping, info, cmd, eval, log, stop, " +
-                        "tests.load, tests.list, tests.run", "unknown_verb");
+                        "tests.load, tests.list, tests.run, session.save", "unknown_verb");
             }
         }
 

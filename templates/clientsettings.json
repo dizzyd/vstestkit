@@ -1,0 +1,35 @@
+{
+  "intSettings": {
+    "screenWidth": 960,
+    "screenHeight": 600,
+    "gameWindowMode": 0,
+    "windowBorder": 0,
+    "maxFps": 60,
+    "vsyncMode": 0,
+    "viewDistance": 96,
+    "masterSoundLevel": 0,
+    "musicLevel": 0,
+    "soundLevel": 0,
+    "ambientSoundLevel": 0,
+    "entitySoundLevel": 0,
+    "weatherSoundLevel": 0,
+    "shadowMapQuality": 0,
+    "mipmapLevel": 0
+  },
+  "boolSettings": {
+    "pauseGameOnLostFocus": false,
+    "startupErrorDialog": false,
+    "showSurvivalHelpDialog": false,
+    "showCreativeHelpDialog": false,
+    "scaleScreenshot": false,
+    "flipScreenshot": true,
+    "smoothShadows": false,
+    "renderParticles": false,
+    "ambientParticles": false,
+    "wavingStuff": false,
+    "multipleInstances": true
+  },
+  "floatSettings": {
+    "ssaa": 1.0
+  }
+}

@@ -35,6 +35,7 @@ namespace VsTestkit
             {
                 Sapi = api;
                 Testing.Vs.AttachServer(api);
+                if (Enabled) SessionPrep.Install(api);
                 Start(api);
             }
         }

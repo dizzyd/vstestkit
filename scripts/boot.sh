@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
 #
-# Boot a headless test server with the testkit endpoint enabled.
+# Boot a test session with the testkit endpoint enabled.
 #
-#   bash scripts/boot.sh                 # fresh world, fixed seed, flat
+#   bash scripts/boot.sh                 # headless server
+#   bash scripts/boot.sh --client        # singleplayer client: BOTH sides, one process
 #   VSTK_SEED=99 bash scripts/boot.sh    # a different world
 #   VSTK_KEEP=1 bash scripts/boot.sh     # reuse the existing run dir
 #
-# Leaves a live server in the background. Talk to it with scripts/vstk, stop it
-# with scripts/stop.sh.
+# --client opens a real window on your desktop. There is no offscreen mode: the
+# client is GLFW/OpenGL and ClientProgramArgs has no headless option.
+#
+# Leaves the game running in the background. Talk to it with scripts/vstk, stop
+# it with scripts/stop.sh.
 #
 source "$(dirname "$0")/common.sh"
 resolve_vintage_story
+
+MODE=server
+[ "${1:-}" = "--client" ] && MODE=client
 
 SEED="${VSTK_SEED:-424242}"
 PLAYSTYLE="${VSTK_PLAYSTYLE:-vstestkit-flat}"
@@ -37,67 +44,38 @@ if [ ! -f "$DATA/serverconfig.json" ]; then
     $SERVER --dataPath "$DATA" --genconfig >/dev/null 2>&1 || die "genconfig failed"
 fi
 
-python3 - "$DATA/serverconfig.json" "$SEED" "$PLAYSTYLE" <<'PY'
-import json, sys, random
+VSTK_MODE="$MODE" python3 "$VSTK_ROOT/scripts/writeconfig.py" "$DATA" "$SEED" "$PLAYSTYLE" \
+    || die "could not write serverconfig"
 
-path, seed, playstyle = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-cfg = json.load(open(path))
+if [ "$MODE" = "client" ]; then
+    # Partial is fine: SettingsBase.Load applies every default first, then
+    # overlays the file, so unlisted keys keep their normal values.
+    cp "$VSTK_ROOT/templates/clientsettings.json" "$DATA/clientsettings.json"
 
-# An ephemeral single-purpose server: off the network, no auth, no advertising.
-cfg["Port"] = 42420
-cfg["Ip"] = "127.0.0.1"
-cfg["AdvertiseServer"] = False
-cfg["Upnp"] = False
-cfg["VerifyPlayerAuth"] = False
-cfg["MaxClients"] = 4
-cfg["ServerName"] = "vstestkit"
-cfg["WelcomeMessage"] = ""
-cfg["Password"] = ""
-# Headless tests have no players connected, and block ticks that only run while
-# someone is watching would make results depend on whether a client attached.
-cfg["PassTimeWhenEmpty"] = True
-
-wc = cfg.setdefault("WorldConfig", {})
-wc["Seed"] = seed
-wc["WorldName"] = "vstestkit"
-wc["PlayStyle"] = playstyle
-wc["PlayStyleLangCode"] = "creativebuilding"
-wc["WorldType"] = "superflat"
-wc["AllowCreativeMode"] = True
-# Must be an object. Left null, world creation fails in a way that reads like a
-# worldgen bug rather than a config one.
-wc["WorldConfiguration"] = {
-    "worldClimate": "superflat",
-    "gameMode": "creative",
-    "hoursPerDay": "2400",
-    "temporalStability": "false",
-    "temporalStorms": "off",
-    "temporalRifts": "off",
-    "snowAccum": "false",
-    "loreContent": "false",
-}
-
-json.dump(cfg, open(path, "w"), indent=2)
-PY
+    # An ephemeral data path has no login, so the client would stop at the sign-in
+    # screen. Merge just the auth keys across, the way Cairn does between packs.
+    python3 "$VSTK_ROOT/scripts/session.py" "$DATA/clientsettings.json" \
+        || die "cannot start a client without a login"
+fi
 
 rm -f "$DATA/.vstestkit"
 
-echo "booting  install=$VINTAGE_STORY"
+echo "booting  install=$VINTAGE_STORY  mode=$MODE"
 echo "         data=$DATA  seed=$SEED  playstyle=$PLAYSTYLE"
 
-# addModPath is a CommandLineParser sequence option: ONE flag followed by every
-# path. Repeating the flag is a duplicate-option parse error, and the server does
-# not report that - ServerProgram dereferences a null ParserResult.Value and dies
-# with a bare NullReferenceException. Each path is the Mods directory itself, not
-# the mod folder inside it.
+# addModPath and addOrigin are CommandLineParser sequence options: ONE flag
+# followed by every path. Repeating the flag is a duplicate-option parse error,
+# and the game does not report it - ServerProgram dereferences a null
+# ParserResult.Value and dies with a bare NullReferenceException. Each path is
+# the Mods directory itself, not the mod folder inside it.
 MODPATHS=("$MODPATH")
 if [ -n "${VSTK_EXTRA_MODS:-}" ]; then
     while IFS= read -r d; do [ -n "$d" ] && MODPATHS+=("$d"); done <<< "${VSTK_EXTRA_MODS//:/$'\n'}"
     echo "         extra mods=$VSTK_EXTRA_MODS"
 fi
 
-# Mods in this workspace build their code into bin/<config>/Mods but leave assets
-# in the source tree, so a content mod loaded by --addModPath alone registers no
+# Mods in this workspace build code into bin/<config>/Mods but leave assets in
+# the source tree, so a content mod loaded by --addModPath alone registers no
 # blocks at all. Its assets directory has to come in as an origin.
 ORIGIN_ARGS=()
 if [ -n "${VSTK_EXTRA_ORIGINS:-}" ]; then
@@ -107,44 +85,108 @@ if [ -n "${VSTK_EXTRA_ORIGINS:-}" ]; then
     echo "         origins=$VSTK_EXTRA_ORIGINS"
 fi
 
-VSTESTKIT=1 nohup $SERVER \
-    --dataPath "$DATA" \
-    --addModPath "${MODPATHS[@]}" \
-    ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
-    > "$VSTK_RUN/server.out" 2>&1 &
+if [ "$MODE" = "client" ]; then
+    CLIENT="$(vs_client_cmd)"
+
+    # Run the test client OFFLINE, so it never touches your real login.
+    #
+    # On startup the client checks the cached session key locally (an RSA
+    # signature, which a superseded key still passes) and then asks
+    # auth3.vintagestory.at whether it is live. Three outcomes, from
+    # SessionManager.ValidateSessionKeyWithServer:
+    #
+    #   valid   -> plays
+    #   invalid -> NULLS the cached key and shows the login screen. Signing in
+    #              there mints a new session, which supersedes the one your Cairn
+    #              packs use - so playing normally then needs a re-auth.
+    #   request fails -> EnumAuthServerResponse.Offline, and DoGameInitStage3
+    #              carries on into the world regardless.
+    #
+    # The third branch is the one we want, and the URL is hardcoded, so the lever
+    # is the network. VSWebClient is a plain HttpClient and honours the standard
+    # proxy variables; pointing them at a closed port fails the request in this
+    # process only. Nothing leaves the machine, no session is ever validated, and
+    # the key Cairn tracks stays live.
+    #
+    # A locally valid key is still required, or the client goes straight to the
+    # login screen without asking anyone - but it need not be a *live* one.
+    if [ "${VSTK_ONLINE:-0}" != "1" ]; then
+        export HTTPS_PROXY="http://127.0.0.1:9" https_proxy="http://127.0.0.1:9"
+        export ALL_PROXY="http://127.0.0.1:9"   all_proxy="http://127.0.0.1:9"
+        echo "         network=offline (auth untouched; VSTK_ONLINE=1 to allow)"
+    fi
+
+    VSTESTKIT=1 nohup $CLIENT \
+        --dataPath "$DATA" \
+        --openWorld vstestkit \
+        --playStyle "$PLAYSTYLE" \
+        --addModPath "${MODPATHS[@]}" \
+        ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
+        > "$VSTK_RUN/server.out" 2>&1 &
+else
+    VSTESTKIT=1 nohup $SERVER \
+        --dataPath "$DATA" \
+        --addModPath "${MODPATHS[@]}" \
+        ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
+        > "$VSTK_RUN/server.out" 2>&1 &
+fi
 
 echo $! > "$VSTK_RUN/server.pid"
 PID="$(cat "$VSTK_RUN/server.pid")"
 
-# Wait for the endpoint to publish its handshake rather than for a fixed sleep -
-# world creation time varies with playstyle and machine.
-TIMEOUT="${VSTK_BOOT_TIMEOUT:-180}"
+# The client tier needs both sides attached. The handshake is written when the
+# first side comes up and rewritten when the second joins, so waiting for the
+# file alone would return before the client is usable.
+WANT_SIDE=server
+[ "$MODE" = "client" ] && WANT_SIDE=client
+
+# Signing in by hand needs the window to stay up well past a normal boot.
+TIMEOUT="${VSTK_BOOT_TIMEOUT:-300}"
+[ "${VSTK_LOGIN:-0}" = "1" ] && TIMEOUT=900
 for i in $(seq 1 "$TIMEOUT"); do
-    if [ -f "$DATA/.vstestkit" ]; then
+    if [ -f "$DATA/.vstestkit" ] && [[ ",$(handshake_sides)," == *",$WANT_SIDE,"* ]]; then
         read_handshake
-        echo "ready    pid=$PID port=$VSTK_PORT  (${i}s)"
+        echo "ready    pid=$PID port=$VSTK_PORT sides=$(handshake_sides)  (${i}s)"
         echo
         echo "  bash scripts/vstk info"
-        echo "  bash scripts/vstk cmd '/time set day'"
-        echo "  bash scripts/vstk eval 'sapi.WorldManager.Seed'"
+        echo "  bash scripts/run.sh <tests.csproj>"
         echo "  bash scripts/stop.sh"
         exit 0
     fi
     if ! kill -0 "$PID" 2>/dev/null; then
-        echo "server exited during boot; last output:" >&2
+        # Check the specific, common failures before dumping a screenful of
+        # shader chatter that says nothing about why it stopped.
+        if grep -q "Server validation response: Bad" "$DATA/Logs/client-main.log" 2>/dev/null; then
+            REASON="$(grep -o "Server says: [a-z]*" "$DATA/Logs/client-main.log" | tail -1)"
+            echo "the auth server rejected the session key (${REASON:-no reason given})," >&2
+            echo "so the client stopped at the login screen." >&2
+            echo >&2
+            echo "Every Vintage Story login supersedes the previous one, so a key that is" >&2
+            echo "merely old is dead even though it still looks valid locally - the check" >&2
+            echo "before this one only verifies a signature." >&2
+            echo >&2
+            echo "Fix: log in once, then let this capture it." >&2
+            echo "  VSTK_LOGIN=1 bash scripts/boot.sh --client" >&2
+            echo "     waits at the login screen instead of timing out; sign in there and" >&2
+            echo "     scripts/stop.sh saves the session to run/session.json for every" >&2
+            echo "     later run." >&2
+            exit 1
+        fi
+
+        echo "game exited during boot; last output:" >&2
         tail -30 "$VSTK_RUN/server.out" >&2
         # A bad command line shows up as an unexplained NRE in the constructor,
         # because ParserResult.Value is null and nothing checks it.
-        if grep -q "ServerProgram..ctor" "$VSTK_RUN/server.out" 2>/dev/null; then
+        if grep -q "ProgramArgs\|Program..ctor" "$VSTK_RUN/server.out" 2>/dev/null; then
             echo >&2
-            echo "hint: that NullReferenceException in ServerProgram means the server" >&2
-            echo "      could not parse its command line, not that the world is broken." >&2
+            echo "hint: a NullReferenceException in ClientProgram/ServerProgram means the" >&2
+            echo "      game could not parse its command line, not that the world is broken." >&2
         fi
         exit 1
     fi
     sleep 1
 done
 
-echo "timed out after ${TIMEOUT}s waiting for the endpoint; last output:" >&2
+echo "timed out after ${TIMEOUT}s waiting for side '$WANT_SIDE'; last output:" >&2
 tail -30 "$VSTK_RUN/server.out" >&2
 exit 1

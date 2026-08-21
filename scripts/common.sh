@@ -31,6 +31,20 @@ vs_server_cmd() {
   fi
 }
 
+vs_client_cmd() {
+  if [ -x "$VINTAGE_STORY/Vintagestory" ]; then
+    echo "$VINTAGE_STORY/Vintagestory"
+  else
+    echo "dotnet $VINTAGE_STORY/Vintagestory.dll"
+  fi
+}
+
+handshake_sides() {
+  python3 -c 'import json,sys
+try: print(",".join(json.load(open(sys.argv[1]))["sides"]))
+except Exception: print("")' "$(handshake_file)" 2>/dev/null
+}
+
 handshake_file() { echo "$VSTK_RUN/data/.vstestkit"; }
 
 read_handshake() {
