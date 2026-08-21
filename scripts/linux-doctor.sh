@@ -56,6 +56,32 @@ command -v sway  >/dev/null 2>&1 && ok "sway"  || warn "sway absent      (apt in
 command -v glxinfo >/dev/null 2>&1 && ok "glxinfo" || warn "glxinfo absent (apt install mesa-utils)"
 echo
 
+echo "RandR outputs (the check that GL alone will not give you)"
+if [ -n "${DISPLAY:-}" ] && command -v xrandr >/dev/null 2>&1; then
+    MONS="$(DISPLAY="$DISPLAY" xrandr --listmonitors 2>/dev/null | head -1)"
+    COUNT="$(echo "$MONS" | grep -oE '[0-9]+' | head -1)"
+    if [ "${COUNT:-0}" -ge 1 ]; then
+        ok "$MONS"
+    else
+        # A headless X server on a GPU with nothing plugged in serves GLX
+        # perfectly and reports zero monitors. GLFW enumerates RandR outputs and
+        # calls glfwGetPrimaryMonitor(), which then returns NULL, and the client
+        # dies before it opens a window - with a null-handle exception that says
+        # nothing about monitors.
+        bad "X is running but reports 0 monitors; the client will not start"
+        echo "        GLX works without one, so a healthy glxinfo proves nothing here."
+        echo "        On NVIDIA, force an output in /etc/X11/xorg.conf:"
+        echo "            Option \"ConnectedMonitor\" \"DFP-0\""
+        echo "            Option \"ModeValidation\" \"NoEdidModes, AllowNonEdidModes\""
+        echo "        then restart the X service and check xrandr --listmonitors."
+    fi
+elif command -v xrandr >/dev/null 2>&1; then
+    warn "no DISPLAY set, so RandR cannot be checked"
+else
+    warn "xrandr absent (apt install x11-xserver-utils)"
+fi
+echo
+
 echo "OpenGL (the client asks for 4.3; a lower context makes it downgrade or fail)"
 if command -v glxinfo >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
     glxinfo -B 2>/dev/null | grep -E "OpenGL renderer|OpenGL core profile version|OpenGL version" \
