@@ -7,6 +7,7 @@
 #   vstk cmd "/time set day"            [--as <player>]
 #   vstk eval 'sapi.WorldManager.Seed'  [--side client]
 #   vstk eval -f snippet.cs
+#   vstk shot [-o /path/out.png]
 #   vstk log --lines 40 --grep vstestkit
 #   vstk stop
 #   vstk raw <verb> '<json body>'
@@ -61,6 +62,14 @@ case "$VERB" in
     # No argument and no -f: read the snippet from stdin, so heredocs work.
     [ -n "$CODE" ] || CODE="$(cat)"
     post eval "{\"code\": $(jsonstr "$CODE"), \"side\": $(jsonstr "$SIDE")}"
+    ;;
+
+  shot)
+    OUT=""
+    while [ $# -gt 0 ]; do
+      case "$1" in -o) OUT="$2"; shift 2 ;; *) OUT="$1"; shift ;; esac
+    done
+    if [ -n "$OUT" ]; then post shot "{\"path\": $(jsonstr "$OUT")}"; else post shot; fi
     ;;
 
   log)

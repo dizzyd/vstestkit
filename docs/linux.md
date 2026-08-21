@@ -113,6 +113,16 @@ VSTK_DISPLAY=wayland-headless VSTK_NVIDIA=1 bash scripts/boot.sh --client
   platforms — which is why pixel baselines have to be keyed by platform and
   `GL_RENDERER` rather than shared.
 
+## Seeing the screen from elsewhere
+
+```bash
+VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh
+```
+
+Captures on the box and copies the PNG back. Verified against this VM: a scene
+built through the endpoint, aimed at, and photographed, hardware-rendered on the
+1060 with no display attached.
+
 ## The verified box
 
 | | |

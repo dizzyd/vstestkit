@@ -33,6 +33,27 @@ bash scripts/stop.sh
 which knows each install's architecture and required .NET. Set `VINTAGE_STORY`
 to override, or `VSTK_GAME_VERSION=1.22.6` to pick a specific install.
 
+## Seeing what it drew
+
+```bash
+VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh      # -> shots/<time>.png
+bash scripts/look.sh -o /tmp/now.png                     # local session
+```
+
+Captures the running session and, for a remote box, copies the image back. This
+is what makes iterating on a headless machine bearable: the alternative is
+asserting about pixels you have never seen.
+
+Two things to set before a capture is worth looking at, because neither is the
+harness's business to guess:
+
+```bash
+bash scripts/vstk cmd "/time set day"    # a night shot is a black rectangle
+```
+
+and point the camera - `Interact.LookAt(pos)` in a test, since a fresh client
+faces wherever it happens to face.
+
 ## Verbs
 
 ```bash
@@ -43,6 +64,7 @@ vstk cmd "/gamemode creative" --as Bob     # ...as a specific player
 vstk eval 'sapi.WorldManager.Seed'         # expression
 vstk eval -f snippet.cs                    # or from a file
 vstk eval --side client '...'              # (step 3)
+vstk shot -o /tmp/x.png                    # screenshot the running client
 vstk log --lines 40 --grep vstestkit
 vstk stop
 vstk raw <verb> '<json>'
