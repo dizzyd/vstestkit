@@ -3,6 +3,7 @@ using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
 using Vintagestory.API.Server;
+using VsTestkit.Testing;
 
 namespace VsTestkit
 {
@@ -33,6 +34,7 @@ namespace VsTestkit
             lock (sync)
             {
                 Sapi = api;
+                Testing.Vs.AttachServer(api);
                 Start(api);
             }
         }
@@ -42,6 +44,7 @@ namespace VsTestkit
             lock (sync)
             {
                 Capi = api;
+                Testing.Vs.AttachClient(api);
                 Start(api);
             }
         }
@@ -87,6 +90,7 @@ namespace VsTestkit
                 // once, and only when nothing is left attached.
                 Sapi = null;
                 Capi = null;
+                Testing.Vs.Detach();
 
                 if (rpc != null)
                 {

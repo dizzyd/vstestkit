@@ -15,6 +15,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The public test API. Shipped alongside the mod so test assemblies loaded
+         at runtime resolve it to this same instance. -->
+    <ProjectReference Include="..\VsTestkit.Runtime\VsTestkit.Runtime.csproj">
+      <Private>true</Private>
+    </ProjectReference>
+  </ItemGroup>
+
+  <ItemGroup>
     <Reference Include="VintagestoryAPI">
       <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
       <Private>false</Private>

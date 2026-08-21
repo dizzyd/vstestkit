@@ -26,9 +26,15 @@ namespace VsTestkit
                 case "eval":  return Eval(args);
                 case "log":   return Log(args);
                 case "stop":  return Stop();
+
+                case "tests.load": return TestVerbs.Load(args);
+                case "tests.list": return TestVerbs.List();
+                case "tests.run":  return TestVerbs.Run(args);
+
                 default:
                     throw new VerbException(
-                        $"unknown verb '{verb}'. known: ping, info, cmd, eval, log, stop", "unknown_verb");
+                        $"unknown verb '{verb}'. known: ping, info, cmd, eval, log, stop, " +
+                        "tests.load, tests.list, tests.run", "unknown_verb");
             }
         }
 

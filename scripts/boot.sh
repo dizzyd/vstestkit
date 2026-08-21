@@ -85,9 +85,32 @@ rm -f "$DATA/.vstestkit"
 echo "booting  install=$VINTAGE_STORY"
 echo "         data=$DATA  seed=$SEED  playstyle=$PLAYSTYLE"
 
+# addModPath is a CommandLineParser sequence option: ONE flag followed by every
+# path. Repeating the flag is a duplicate-option parse error, and the server does
+# not report that - ServerProgram dereferences a null ParserResult.Value and dies
+# with a bare NullReferenceException. Each path is the Mods directory itself, not
+# the mod folder inside it.
+MODPATHS=("$MODPATH")
+if [ -n "${VSTK_EXTRA_MODS:-}" ]; then
+    while IFS= read -r d; do [ -n "$d" ] && MODPATHS+=("$d"); done <<< "${VSTK_EXTRA_MODS//:/$'\n'}"
+    echo "         extra mods=$VSTK_EXTRA_MODS"
+fi
+
+# Mods in this workspace build their code into bin/<config>/Mods but leave assets
+# in the source tree, so a content mod loaded by --addModPath alone registers no
+# blocks at all. Its assets directory has to come in as an origin.
+ORIGIN_ARGS=()
+if [ -n "${VSTK_EXTRA_ORIGINS:-}" ]; then
+    ORIGINS=()
+    while IFS= read -r d; do [ -n "$d" ] && ORIGINS+=("$d"); done <<< "${VSTK_EXTRA_ORIGINS//:/$'\n'}"
+    ORIGIN_ARGS=(--addOrigin "${ORIGINS[@]}")
+    echo "         origins=$VSTK_EXTRA_ORIGINS"
+fi
+
 VSTESTKIT=1 nohup $SERVER \
     --dataPath "$DATA" \
-    --addModPath "$MODPATH" \
+    --addModPath "${MODPATHS[@]}" \
+    ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
     > "$VSTK_RUN/server.out" 2>&1 &
 
 echo $! > "$VSTK_RUN/server.pid"
@@ -110,6 +133,13 @@ for i in $(seq 1 "$TIMEOUT"); do
     if ! kill -0 "$PID" 2>/dev/null; then
         echo "server exited during boot; last output:" >&2
         tail -30 "$VSTK_RUN/server.out" >&2
+        # A bad command line shows up as an unexplained NRE in the constructor,
+        # because ParserResult.Value is null and nothing checks it.
+        if grep -q "ServerProgram..ctor" "$VSTK_RUN/server.out" 2>/dev/null; then
+            echo >&2
+            echo "hint: that NullReferenceException in ServerProgram means the server" >&2
+            echo "      could not parse its command line, not that the world is broken." >&2
+        fi
         exit 1
     fi
     sleep 1
