@@ -176,6 +176,12 @@ So: never `Task.Run`, never `.Result`, never a raw thread. If you find yourself
 off the game thread, `await OnServer()` (or `OnClient()`) to get back. Helpers
 check, and say so rather than racing.
 
+**Time is three different clocks, and only one of them is the calendar.**
+`Hours(n)` is `Calendar.Add` and costs nothing. Tick listeners, though, are measured
+against a real-time `Stopwatch`, so `/time speed` and `CalendarSpeedMul` do not
+accelerate them at all — use `await World.TickNow(pos)` to fire a block entity's
+listeners immediately. Rendering is a third clock again; see `Frames.Wait`.
+
 **Wait on ticks, never on wall-clock.** `await Ticks(n)` advances only when the
 game loop does, so a stalled or throttled game blocks the test instead of letting
 it pass by luck. `await Until(() => ..., maxTicks)` is better still when the
@@ -188,6 +194,7 @@ timing is not exactly known. `Task.Delay` in a test is a bug.
 | `P(x,y,z)` | position in this test's plot; `(0,0,0)` is the ground block |
 | `World.` | `SetBlock`, `GetBlock`, `BlockCode`, `Fill`, `BE<T>`, `BEOrNull<T>`, `SpawnEntity`, `Entities`, `Stack`, `GroundY`, `LoadArea` |
 | `Ticks(n)`, `Until(cond)`, `Hours(h)` | waiting |
+| `World.TickNow(pos)` | fire a block entity's tick listeners now, instead of waiting out a real-time interval |
 | `Cmd("/give ...")` | any chat command, as console or a named player |
 | `BE<T>(pos)` | block entity, with a message naming what was actually there |
 | `Assert.` | `Equal`, `True`, `Greater`, `Close`, `Contains`, `Throws`, `NotNull`, … |

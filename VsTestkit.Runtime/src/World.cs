@@ -1,10 +1,15 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Linq;
 using System.Threading.Tasks;
 using Vintagestory.API.Common;
 using Vintagestory.API.Common.Entities;
 using Vintagestory.API.MathTools;
+using Vintagestory.API.Server;
+using Vintagestory.Common;
+using Vintagestory.Server;
 
 namespace VsTestkit.Testing
 {
@@ -158,6 +163,79 @@ namespace VsTestkit.Testing
                 OnLoaded = () => tcs.TrySetResult(null)
             });
             return tcs.Task;
+        }
+
+        // ---------- tick listeners ----------
+
+        /// <summary>
+        /// Makes the tick listeners registered at a position fire on the next
+        /// game tick, as if their interval had just elapsed.
+        ///
+        /// Block entities schedule work on RegisterGameTickListener, and those
+        /// intervals are measured against a real-time Stopwatch
+        /// (ServerMain.totalUnpausedTime), *not* the calendar. Speeding time up
+        /// with /time speed or CalendarSpeedMul does not touch them - a listener
+        /// on a 5-second interval costs 5 real seconds however fast the world
+        /// clock runs. A test that needs two firings therefore idles for ten
+        /// seconds doing nothing.
+        ///
+        /// The listener's last-fired stamp is rewound by exactly its interval
+        /// rather than to zero, so the handler still receives the dt it expects.
+        /// Handing it the whole server uptime would be a lie that some mods act
+        /// on.
+        /// </summary>
+        public static async Task TickNow(BlockPos pos, int maxTicks = 20)
+        {
+            var sapi = Vs.RequireServer();
+            var rewound = Rewind(sapi, pos);
+
+            if (rewound == 0)
+                throw new AssertionException(
+                    $"no tick listeners are registered at {Show(pos)} - is there a block entity there, " +
+                    "and does it register one?");
+
+            // The listener fires from the server's own tick loop, so give it one.
+            for (var i = 0; i < maxTicks; i++)
+            {
+                await Vs.Ticks(1);
+                if (Rewound(sapi, pos)) return;
+            }
+        }
+
+        /// <summary>How many tick listeners are registered at a position.</summary>
+        public static int TickListenerCount(BlockPos pos) => Listeners(Vs.RequireServer(), pos).Count;
+
+        static List<GameTickListenerBlock> Listeners(ICoreServerAPI sapi, BlockPos pos)
+        {
+            var server = (ServerMain)sapi.World;
+            var field = server.EventManager.GetType().GetField(
+                "GameTickListenersBlock",
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.FlattenHierarchy);
+
+            if (field?.GetValue(server.EventManager) is not IEnumerable raw)
+                throw new AssertionException(
+                    "could not reach the server's block tick listeners; the field moved in this game version");
+
+            var found = new List<GameTickListenerBlock>();
+            foreach (var item in raw)
+                if (item is GameTickListenerBlock l && l.Pos != null && l.Pos.Equals(pos)) found.Add(l);
+            return found;
+        }
+
+        static int Rewind(ICoreServerAPI sapi, BlockPos pos)
+        {
+            var now = sapi.World.ElapsedMilliseconds;
+            var listeners = Listeners(sapi, pos);
+            foreach (var l in listeners) l.LastUpdateMilliseconds = now - l.Millisecondinterval - 1;
+            return listeners.Count;
+        }
+
+        static bool Rewound(ICoreServerAPI sapi, BlockPos pos)
+        {
+            var now = sapi.World.ElapsedMilliseconds;
+            foreach (var l in Listeners(sapi, pos))
+                if (now - l.LastUpdateMilliseconds > l.Millisecondinterval) return false;
+            return true;
         }
 
         // ---------- weather ----------

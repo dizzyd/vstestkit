@@ -118,10 +118,12 @@ block entity. Three of the seven olla tests would have passed vacuously.
   the chest dialog is `Vintagestory.API.Client.GuiDialogBlockEntityInventory`,
   and `Vintagestory.GameContent` has a different one. A stray `using` binds the
   wrong type and `OfType<T>` matches nothing. `Gui` now says so explicitly.
-- A block entity on a tick listener that works from `Calendar.TotalHours` deltas
-  needs one firing to take a baseline and a second to act, so a test has to
-  advance the calendar *between* two firings. Olla's listener is 5s, which is why
-  its tests take ~15s each.
+- **Tick listeners run on a real-time clock.** `RegisterGameTickListener` intervals
+  are compared against `ServerMain.totalUnpausedTime`, a `Stopwatch`, so `/time
+  speed` and `CalendarSpeedMul` accelerate the calendar and nothing else — a
+  5-second listener still costs 5 real seconds. `World.TickNow(pos)` rewinds a
+  block entity's listeners by exactly their interval so they fire on the next
+  tick with the dt they expect. Olla's suite went from 83s to 3.5s.
 - `--addModPath` and `--addOrigin` are CommandLineParser *sequence* options: one
   flag, many values. Repeating the flag is a parse error, and the server reports
   it as a bare `NullReferenceException` in `ServerProgram..ctor` because nothing
