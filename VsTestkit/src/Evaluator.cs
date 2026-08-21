@@ -169,7 +169,7 @@ public static class VstkSnippet
         /// Every loaded assembly with a real file location. This is what puts the
         /// mod under test in scope without anyone configuring anything.
         /// </summary>
-        static IEnumerable<MetadataReference> References()
+        internal static IEnumerable<MetadataReference> References()
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var refs = new List<MetadataReference>();

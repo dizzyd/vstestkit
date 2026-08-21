@@ -44,17 +44,29 @@ namespace VsTestkit.Testing
             if (!File.Exists(path))
                 throw new FileNotFoundException($"no test assembly at {path}", path);
 
+            return LoadImage(File.ReadAllBytes(path), Path.GetFullPath(path));
+        }
+
+        /// <summary>
+        /// Loads a compiled test assembly from memory and lists what is in it.
+        ///
+        /// From an image rather than a file so a rebuilt suite can replace a
+        /// loaded one without the file being held, and so a suite compiled from
+        /// source in-process - which never touches disk - loads the same way.
+        /// </summary>
+        public static IReadOnlyList<TestCase> LoadImage(byte[] image, string label)
+        {
             loadContext?.Unload();
             loadContext = new TestLoadContext();
 
             Assembly asm;
-            using (var ms = new MemoryStream(File.ReadAllBytes(path)))
+            using (var ms = new MemoryStream(image))
             {
                 asm = loadContext.LoadFromStream(ms);
             }
 
             loaded.Clear();
-            loadedPath = Path.GetFullPath(path);
+            loadedPath = label;
 
             foreach (var type in SafeTypes(asm))
             {
@@ -77,7 +89,7 @@ namespace VsTestkit.Testing
 
                     loaded.Add(new TestCase
                     {
-                        Assembly = Path.GetFileName(path),
+                        Assembly = Path.GetFileName(label),
                         ClassName = type.FullName,
                         MethodName = m.Name,
                         RequiresClient = classClient || m.GetCustomAttribute<RequiresClientAttribute>() != null,

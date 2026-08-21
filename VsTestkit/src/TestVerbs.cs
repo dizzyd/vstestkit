@@ -18,15 +18,31 @@ namespace VsTestkit
             if (string.IsNullOrEmpty(path))
                 throw new VerbException("missing required argument 'path'", "bad_args");
 
-            if (!File.Exists(path))
-                throw new VerbException($"no test assembly at {path}", "no_assembly");
-
             try
             {
-                var cases = TestRunner.Load(path);
+                IReadOnlyList<TestCase> cases;
+                string source;
+
+                // A .dll is loaded as built. Anything else is treated as sources
+                // and compiled here, so a box with only a runtime can still run a
+                // suite.
+                if (File.Exists(path) && path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                {
+                    cases = TestRunner.Load(path);
+                    source = "assembly";
+                }
+                else
+                {
+                    var files = SourceSuite.Discover(path);
+                    var image = SourceSuite.Compile(files, out var label);
+                    cases = TestRunner.LoadImage(image, label);
+                    source = $"{files.Count} source file(s)";
+                }
+
                 return new
                 {
                     path = TestRunner.LoadedPath,
+                    source,
                     count = cases.Count,
                     tests = cases.Select(Describe).ToArray()
                 };

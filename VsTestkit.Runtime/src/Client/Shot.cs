@@ -40,6 +40,8 @@ namespace VsTestkit.Testing
                 hotkey.Handler(hotkey.CurrentMapping);
             });
 
+            long lastSize = -1;
+
             for (var i = 0; i < maxTicks; i++)
             {
                 await Vs.Ticks(1);
@@ -49,14 +51,22 @@ namespace VsTestkit.Testing
 
                 var newest = fresh.OrderByDescending(File.GetLastWriteTimeUtc).First();
 
-                // The file appears before the write finishes often enough to
-                // matter; a zero-length PNG is a confusing way to fail.
-                if (new FileInfo(newest).Length == 0) continue;
+                // The file appears in the directory before the game has finished
+                // writing it. Wait for the size to stop changing, and treat a
+                // locked file as "not ready yet" rather than as a failure - a
+                // capture that is a few frames late is not a broken test.
+                long size;
+                try { size = new FileInfo(newest).Length; }
+                catch (IOException) { continue; }
+
+                if (size == 0 || size != lastSize) { lastSize = size; continue; }
 
                 var dir = Path.GetDirectoryName(Path.GetFullPath(destination));
                 if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-                File.Copy(newest, destination, true);
+                try { File.Copy(newest, destination, true); }
+                catch (IOException) { continue; }
+
                 return Path.GetFullPath(destination);
             }
 

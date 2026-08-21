@@ -14,6 +14,7 @@
 # it with scripts/stop.sh.
 #
 source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/display.sh"
 resolve_vintage_story
 
 MODE=server
@@ -88,14 +89,8 @@ fi
 if [ "$MODE" = "client" ]; then
     CLIENT="$(vs_client_cmd)"
 
-    # The client needs a real, awake display: GLFW asks for the primary monitor
-    # and refuses to open a window without one, so a screen that slept part way
-    # through a long run kills the next boot. -u declares user activity, which
-    # wakes it; the -d assertion below then holds it awake for the session.
-    if [ "$(uname)" = "Darwin" ] && command -v caffeinate >/dev/null 2>&1; then
-        caffeinate -u -t 1 >/dev/null 2>&1 || true
-        sleep 1
-    fi
+    STRATEGY="$(start_display)"
+    echo "         display=$STRATEGY${DISPLAY:+ DISPLAY=$DISPLAY}${WAYLAND_DISPLAY:+ WAYLAND_DISPLAY=$WAYLAND_DISPLAY}"
 
     # Run the test client OFFLINE, so it never touches your real login.
     #
@@ -143,12 +138,10 @@ fi
 echo $! > "$VSTK_RUN/server.pid"
 PID="$(cat "$VSTK_RUN/server.pid")"
 
-# Hold the display awake for as long as the game lives. Tied to the pid rather
-# than wrapping the launch, so stop.sh still owns the process directly and the
-# assertion goes away on its own when the game exits.
-if [ "$MODE" = "client" ] && [ "$(uname)" = "Darwin" ] && command -v caffeinate >/dev/null 2>&1; then
-    caffeinate -d -w "$PID" >/dev/null 2>&1 &
-fi
+# Hold the display awake for as long as the game lives, where the platform has
+# such a notion. Tied to the pid rather than wrapping the launch, so stop.sh
+# still owns the process directly.
+[ "$MODE" = "client" ] && hold_display_awake "$PID"
 
 # The client tier needs both sides attached. The handshake is written when the
 # first side comes up and rewritten when the second joins, so waiting for the

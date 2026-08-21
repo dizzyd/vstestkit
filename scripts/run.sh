@@ -2,8 +2,10 @@
 #
 # Build a test project, run it against a live game, report.
 #
+#   bash scripts/run.sh tests/selftest              # sources, compiled in-game
 #   bash scripts/run.sh tests/selftest/selftest.csproj
 #   bash scripts/run.sh path/to/mod.tests.csproj --filter Moisture
+#   bash scripts/run.sh <...> --client    run the client tier too
 #   bash scripts/run.sh <...> --keep      reuse/leave a session running
 #   bash scripts/run.sh <...> --mod DIR   load a mod project (code + assets)
 #   bash scripts/run.sh <...> --mods DIR  a built Mods directory
@@ -14,13 +16,14 @@
 source "$(dirname "$0")/common.sh"
 resolve_vintage_story
 
-TARGET=""; FILTER=""; KEEP=0; EXTRA_MODS=""; EXTRA_ORIGINS=""
+TARGET=""; FILTER=""; KEEP=0; EXTRA_MODS=""; EXTRA_ORIGINS=""; CLIENT_MODE=0
 CONFIG="${VSTK_CONFIG:-Debug}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --filter) FILTER="$2"; shift 2 ;;
     --keep)   KEEP=1; shift ;;
+    --client) CLIENT_MODE=1; shift ;;
     --mods)   EXTRA_MODS="${EXTRA_MODS:+$EXTRA_MODS:}$2"; shift 2 ;;
     --origin) EXTRA_ORIGINS="${EXTRA_ORIGINS:+$EXTRA_ORIGINS:}$2"; shift 2 ;;
     # Convenience for this workspace's layout: a mod project directory holds its
@@ -40,7 +43,15 @@ done
 
 # ---- build ----------------------------------------------------------------
 
-if [ "${TARGET##*.}" = "csproj" ]; then
+# A directory of .cs files is compiled inside the game by the testkit, so a box
+# with only a .NET runtime - which is what Cairn provisions - can still run a
+# suite. A csproj is built here and loaded as an assembly.
+if [ -d "$TARGET" ]; then
+    dotnet build "$VSTK_ROOT/VsTestkit/VsTestkit.csproj" -c "$CONFIG" -v quiet --nologo >/dev/null 2>&1 \
+        || echo "note: testkit not rebuilt (no SDK?); using the existing build" >&2
+    ASM="$(cd "$TARGET" && pwd)"
+
+elif [ "${TARGET##*.}" = "csproj" ]; then
     dotnet build "$VSTK_ROOT/VsTestkit/VsTestkit.csproj" -c "$CONFIG" -v quiet --nologo >/dev/null \
         || die "testkit build failed"
     dotnet build "$TARGET" -c "$CONFIG" -v quiet --nologo || die "test project build failed"
@@ -59,7 +70,7 @@ else
     ASM="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
 fi
 
-[ -f "$ASM" ] || die "built test assembly not found at $ASM"
+[ -e "$ASM" ] || die "nothing to run at $ASM"
 
 # ---- session --------------------------------------------------------------
 
@@ -70,7 +81,9 @@ if [ -f "$(handshake_file)" ] && [ -f "$VSTK_RUN/server.pid" ] \
 else
     [ -n "$EXTRA_MODS" ] && export VSTK_EXTRA_MODS="$EXTRA_MODS"
     [ -n "$EXTRA_ORIGINS" ] && export VSTK_EXTRA_ORIGINS="$EXTRA_ORIGINS"
-    bash "$VSTK_ROOT/scripts/boot.sh" >/dev/null || die "boot failed"
+    BOOT_ARGS=()
+    [ "$CLIENT_MODE" = "1" ] && BOOT_ARGS+=(--client)
+    bash "$VSTK_ROOT/scripts/boot.sh" ${BOOT_ARGS[@]+"${BOOT_ARGS[@]}"} >/dev/null || die "boot failed"
     STARTED=1
 fi
 
