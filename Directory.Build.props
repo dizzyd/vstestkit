@@ -1,0 +1,9 @@
+<!-- Standalone repo: stop MSBuild walking up into whatever workspace this is
+     checked out beside. vstestkit pins its own TFM. -->
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+</Project>

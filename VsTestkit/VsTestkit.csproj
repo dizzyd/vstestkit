@@ -1,0 +1,68 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AssemblyName>VsTestkit</AssemblyName>
+    <RootNamespace>VsTestkit</RootNamespace>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- The addModPath argument wants the Mods directory, so the mod itself lives
+         one level deeper. Matches the layout the other mods in this family use. -->
+    <OutputPath>bin\$(Configuration)\Mods\vstestkit</OutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="VintagestoryAPI">
+      <HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VintagestoryLib">
+      <HintPath>$(VINTAGE_STORY)/VintagestoryLib.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VSSurvivalMod">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSSurvivalMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VSEssentials">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSEssentials.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="VSCreativeMod">
+      <HintPath>$(VINTAGE_STORY)/Mods/VSCreativeMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- The game ships Roslyn for compiling source mods, and Lib/ is on the mod
+         assembly search path, so /eval costs us no extra dependency. -->
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(VINTAGE_STORY)/Lib/Microsoft.CodeAnalysis.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(VINTAGE_STORY)/Lib/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="modinfo.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <!-- Declares the vstestkit-flat playstyle. Vanilla creativebuilding loads only
+         game+creative, so survival content would not exist in the test world. -->
+    <Content Include="worldconfig.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="assets/**/*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

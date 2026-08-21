@@ -1,0 +1,25 @@
+{
+  "playstyles": [
+    {
+      "code": "vstestkit-flat",
+      "playListCode": "creative",
+      "langCode": "vstestkit-flat",
+      "listOrder": 99,
+      "mods": ["game", "creative", "survival"],
+      "worldType": "superflat",
+      "worldConfig": {
+        "worldClimate": "superflat",
+        "gameMode": "creative",
+        "hoursPerDay": "2400",
+        "cloudypos": "0.5",
+        "temporalStability": "false",
+        "temporalStorms": "off",
+        "temporalRifts": "off",
+        "snowAccum": "false",
+        "colorAccurateWorldmap": "true",
+        "loreContent": "false"
+      }
+    }
+  ],
+  "worldConfigAttributes": []
+}

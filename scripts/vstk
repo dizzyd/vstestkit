@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+#
+# Talk to a running testkit session.
+#
+#   vstk info
+#   vstk ping
+#   vstk cmd "/time set day"            [--as <player>]
+#   vstk eval 'sapi.WorldManager.Seed'  [--side client]
+#   vstk eval -f snippet.cs
+#   vstk log --lines 40 --grep vstestkit
+#   vstk stop
+#   vstk raw <verb> '<json body>'
+#
+source "$(dirname "$0")/common.sh"
+read_handshake
+
+usage() { sed -n '3,16p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+post() {
+  local verb="$1" body="${2:-}"
+  [ -n "$body" ] || body='{}' 
+  local status=0
+  curl -sS --fail-with-body \
+       -H "X-Vstk-Token: $VSTK_TOKEN" \
+       -H "Content-Type: application/json" \
+       -X POST --data-binary "$body" \
+       "http://127.0.0.1:$VSTK_PORT/v1/$verb" || status=$?
+  # Always terminate the line, but keep curl's status so callers can branch on a
+  # failed verb.
+  echo
+  return $status
+}
+
+jsonstr() { python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$1"; }
+
+VERB="${1:-}"; shift || true
+case "$VERB" in
+  ping|info) post "$VERB" ;;
+
+  stop)      post stop ;;
+
+  cmd)
+    CMD="${1:-}"; shift || true
+    [ -n "$CMD" ] || usage
+    AS="console"
+    while [ $# -gt 0 ]; do
+      case "$1" in --as) AS="$2"; shift 2 ;; *) usage ;; esac
+    done
+    post cmd "{\"command\": $(jsonstr "$CMD"), \"as\": $(jsonstr "$AS")}"
+    ;;
+
+  eval)
+    SIDE="server"; CODE=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --side) SIDE="$2"; shift 2 ;;
+        -f)     CODE="$(cat "$2")"; shift 2 ;;
+        *)      CODE="$1"; shift ;;
+      esac
+    done
+    # No argument and no -f: read the snippet from stdin, so heredocs work.
+    [ -n "$CODE" ] || CODE="$(cat)"
+    post eval "{\"code\": $(jsonstr "$CODE"), \"side\": $(jsonstr "$SIDE")}"
+    ;;
+
+  log)
+    FILE="server-main"; LINES=50; GREP=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --file)  FILE="$2"; shift 2 ;;
+        --lines) LINES="$2"; shift 2 ;;
+        --grep)  GREP="$2"; shift 2 ;;
+        *) usage ;;
+      esac
+    done
+    BODY="{\"file\": $(jsonstr "$FILE"), \"lines\": $LINES"
+    [ -n "$GREP" ] && BODY="$BODY, \"grep\": $(jsonstr "$GREP")"
+    post log "$BODY}"
+    ;;
+
+  raw)
+    [ $# -ge 1 ] || usage
+    post "$1" "${2:-}"
+    ;;
+
+  *) usage ;;
+esac
