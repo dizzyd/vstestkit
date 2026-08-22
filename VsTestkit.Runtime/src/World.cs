@@ -241,6 +241,51 @@ namespace VsTestkit.Testing
         }
 
         /// <summary>
+        /// Moves the calendar to an exact absolute position, in total hours.
+        ///
+        /// The commands are not enough for anything visual. "/time set day" is
+        /// documented as fast-forwarding *to* a time of day, so from different
+        /// starting points it lands on different absolute days - and cloud shadow
+        /// patterns, which fall across the ground whether or not clouds are drawn,
+        /// are a function of absolute time. Two captures of one scene then differ
+        /// by 18% of their pixels, all of it ground.
+        ///
+        /// Going backwards is allowed and safe here: block entities already handle
+        /// a calendar that moves behind them, because imported schematics do it.
+        ///
+        /// Note the time of day is totalHours modulo Calendar.HoursPerDay, so
+        /// pick the value accordingly - a number that merely looks like midday
+        /// will happily photograph midnight.
+        /// </summary>
+        public static async Task SetCalendarTo(double totalHours)
+        {
+            var calendar = Vs.RequireServer().World.Calendar;
+
+            // Two steps, because neither alone does the job.
+            //
+            // Calendar.Add moves the server's clock precisely and in either
+            // direction, but tells nobody: the client goes on rendering the old
+            // sky, so the calendar reads midday while the picture is midnight.
+            // The /time commands avoid that by following the change with
+            // resendTimePacket - but "/time add" refuses negative amounts, and a
+            // suite that pins the same instant every run is going backwards as
+            // often as not.
+            //
+            // So: jump silently to just short of the target, then let the command
+            // cover the last fraction of an hour and do the telling.
+            const double nudge = 0.001;
+
+            var delta = totalHours - nudge - calendar.TotalHours;
+            if (Math.Abs(delta) > 1e-9) calendar.Add((float)delta);
+
+            var result = await Vs.Cmd(FormattableString.Invariant($"/time add {nudge} hours"));
+            if (result.Status != EnumCommandStatus.Success)
+                throw new AssertionException($"could not move the calendar: {result.StatusMessage}");
+
+            await Vs.Ticks(4);
+        }
+
+        /// <summary>
         /// Sets how fast time passes; 0 stops it, 60 is the vanilla default.
         ///
         /// The harness freezes the clock at startup so a scene does not change

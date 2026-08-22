@@ -44,14 +44,34 @@ namespace VsTestkit.Testing
 
     public static class Visual
     {
-        /// <summary>Fraction of pixels allowed to differ before a test fails.</summary>
-        public const double DefaultTolerance = 0.005;
+        /// <summary>
+        /// Fraction of pixels allowed to differ before a test fails.
+        ///
+        /// Chosen from measurement, not taste. Repeat captures of an identical
+        /// scene sit at 0.02-0.04% on Apple M4 and up to 0.32% on the GTX 1060,
+        /// while a scene with one column of blocks changed comes out at 8.9%.
+        /// 2% leaves six times the observed noise below it and still four times
+        /// clear of the smallest real change measured - 0.5% would have been
+        /// within a factor of two of NVIDIA's noise floor and eventually flaked.
+        /// </summary>
+        public const double DefaultTolerance = 0.02;
 
         /// <summary>Per-channel difference at which a pixel counts as different at all.</summary>
         public const int DefaultPixelThreshold = 12;
 
-        /// <summary>Frames to let the scene settle before capturing.</summary>
-        public const int SettleFrames = 6;
+        /// <summary>
+        /// Frames to let the scene settle before capturing.
+        ///
+        /// Generous on purpose. Chunk meshing runs on its own threads, so a
+        /// capture taken shortly after a teleport into freshly loaded chunks
+        /// catches terrain and blocks part-built. That was worth 2% of the frame
+        /// on the first test of a run and 0.04% on a later one - the same scene,
+        /// differing only in how long the client had had to draw it.
+        /// </summary>
+        public const int SettleFrames = 30;
+
+        /// <summary>Ticks to let chunk meshing catch up before those frames.</summary>
+        public const int SettleTicks = 20;
 
         static string rendererCache;
 
@@ -114,6 +134,7 @@ namespace VsTestkit.Testing
 
             try
             {
+                await Vs.Ticks(SettleTicks);
                 await Frames.Wait(SettleFrames);
 
                 Directory.CreateDirectory(ArtifactDir);

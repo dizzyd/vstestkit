@@ -34,8 +34,13 @@ Exit code is non-zero on failure. The report lands in `run/current/results/`.
 
 | | |
 |---|---|
-| **`dizzyd@vsclient.home`** | Primary. Headless Ubuntu, GTX 1060, hardware GL. Push with `scripts/sync-linux.sh dizzyd@vsclient.home`, then run over SSH. |
-| **macOS** | Interactive debugging. The client opens a real window; the display must be awake and must stay awake. |
+| **`dizzyd@vsclient.home`** | **Run tests here.** Headless Ubuntu, GTX 1060, hardware GL. `scripts/sync-linux.sh dizzyd@vsclient.home [--mod DIR]`, then run over SSH. |
+| **macOS** | Build only. The client tier works but is not dependable: the display must be awake and unlocked, sleeps during long sessions, and the client has died silently mid-run. |
+
+```bash
+bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../olla/olla
+ssh dizzyd@vsclient.home 'cd vstestkit && bash scripts/run.sh ../olla/tests --mod ~/mods/olla/olla'
+```
 
 ## Writing a test
 
@@ -113,6 +118,27 @@ await World.TickNow(ollaPos);   // does the work
 
 That took olla's suite from 83s to 3.5s. Wait the interval out instead only when the
 *scheduling* is what you are testing.
+
+## Visual baselines
+
+```csharp
+await World.SetCalendarTo(500 * 24 + 12);   // absolute: midday on day 500
+await Ticks(10);
+... build the scene, stand somewhere, aim ...
+await Visual.Match("overlay");
+```
+
+Compares against `baselines/<os>-<renderer>/<name>.png`; records one and passes if
+absent, `VSTK_UPDATE_BASELINES=1` to overwrite. A failure writes a diff image with
+differing pixels marked. Only the middle half of the frame is compared by default.
+
+**Pin absolute time**, not the time of day: `/time set day` fast-forwards to the
+next such hour, so runs land on different absolute days, and sun angle, season and
+cloud shadow all follow absolute time. Time of day is `hours % 24` — a number that
+merely looks like midday will photograph midnight.
+
+Measured on the 1060: unchanged 0.02-0.04%, one changed column of blocks 8.4%,
+tolerance 2%.
 
 ## Seeing the screen
 

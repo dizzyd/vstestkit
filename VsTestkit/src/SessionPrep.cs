@@ -36,6 +36,7 @@ namespace VsTestkit
             sapi.Event.ServerRunPhase(EnumServerRunPhase.RunGame, () =>
             {
                 StopTheWeather(sapi);
+                PinTheDate(sapi);
                 StopTheClock(sapi);
             });
         }
@@ -52,6 +53,40 @@ namespace VsTestkit
         ///
         /// Set VSTK_WEATHER=1 when the weather is the thing under test.
         /// </summary>
+        /// <summary>
+        /// Puts the world at a fixed date before anything renders it.
+        ///
+        /// Season is baked into chunk meshes when they are tesselated, so the
+        /// grass takes its colour from whatever the date was as each chunk was
+        /// built. Setting the date later re-colours nothing already drawn: a
+        /// fresh boot then renders yellow ground where a warm session renders
+        /// green, from the same seed at the same calendar time. Doing it here, at
+        /// RunGame and before any client has chunks, means everything is meshed
+        /// under one date.
+        ///
+        /// Midday on day 500 by default; VSTK_WORLD_HOURS overrides. Time of day
+        /// is total hours modulo 24.
+        /// </summary>
+        static void PinTheDate(ICoreServerAPI sapi)
+        {
+            var target = 500.0 * 24 + 12;
+
+            var configured = Environment.GetEnvironmentVariable("VSTK_WORLD_HOURS");
+            if (!string.IsNullOrEmpty(configured) &&
+                double.TryParse(configured, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+            {
+                target = parsed;
+            }
+
+            var calendar = sapi.World.Calendar;
+            calendar.Add((float)(target - calendar.TotalHours));
+
+            Hub.Logger?.Notification(
+                "[vstestkit] world date pinned to {0} total hours (hour {1} of the day)",
+                target, target % calendar.HoursPerDay);
+        }
+
         /// <summary>
         /// Freezes the passage of time, unless VSTK_TIME=1.
         ///

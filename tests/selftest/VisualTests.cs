@@ -14,6 +14,19 @@ namespace VsTestkit.SelfTest
     [RequiresClient]
     public class VisualTests
     {
+        /// <summary>
+        /// The absolute calendar position every capture is taken at - the same
+        /// one the harness pins at startup, so this is normally a no-op and only
+        /// matters if an earlier test moved time.
+        ///
+        /// Hour 12 of day 500, so midday: total hours modulo hoursPerDay is the
+        /// time of day, and getting that wrong photographs the dark. 12000.5 -
+        /// which looks like "midday-ish" and is not - produced baselines that
+        /// were black rectangles full of stars, and one of them still "passed"
+        /// because the capture matched it.
+        /// </summary>
+        const double PinnedHours = 500 * 24 + 12;
+
         /// <summary>A checkerboard wall: high contrast, sharp edges, no animation.</summary>
         static void BuildWall()
         {
@@ -25,13 +38,14 @@ namespace VsTestkit.SelfTest
 
         static async Task Compose()
         {
-            // Pin what the picture depends on. The harness freezes the clock, but
-            // any earlier test calling Hours() moves the calendar for everyone -
-            // and the month drives grass colour while the hour drives the sun. A
-            // capture taken without pinning both matches when this test runs alone
-            // and fails in a full suite, which is a maddening way to find out.
-            await Cmd("/time setmonth jun");
-            await Cmd("/time set day");
+            // Pin absolute time, not just the time of day. The harness freezes
+            // the clock, but any earlier test calling Hours() moves the calendar
+            // for everyone, and "/time set day" fast-forwards to the next such
+            // hour - so runs land on different absolute days. Sun angle, season
+            // and cloud shadow all follow absolute time, and the last of those
+            // alone was worth 18% of the frame.
+            await World.SetCalendarTo(PinnedHours);
+            await Ticks(10);          // the client's sky follows the jump
             BuildWall();
             await Ticks(4);
 
@@ -40,11 +54,21 @@ namespace VsTestkit.SelfTest
             await Ticks(4);
         }
 
+        /// <summary>
+        /// Framed on the wall itself, not the default middle-of-the-frame box.
+        ///
+        /// Terrain colour is not stable across worlds - the same seed at the same
+        /// pinned date renders green ground in one session and yellow in the next,
+        /// while the built blocks come out pixel-identical. So a visual assertion
+        /// frames its subject; anything else is asserting about scenery.
+        /// </summary>
+        static readonly VisualRegion Wall = new VisualRegion(290, 160, 380, 200);
+
         [VsTest(TimeoutMs = 120000)]
         public async Task TheViewMatchesItsBaseline()
         {
             await Compose();
-            await Visual.Match("checkerboard-wall");
+            await Visual.Match("checkerboard-wall", region: Wall);
         }
 
         [VsTest(TimeoutMs = 120000)]
@@ -53,7 +77,7 @@ namespace VsTestkit.SelfTest
             await Compose();
 
             // Record what this scene looks like, under a name of its own.
-            await Visual.Match("change-detection");
+            await Visual.Match("change-detection", region: Wall);
 
             // Now change it, materially but not enormously: one column of the
             // wall swapped. If the comparison were vacuous - always passing, or
@@ -62,7 +86,7 @@ namespace VsTestkit.SelfTest
             await Ticks(4);
 
             var e = await Assert.ThrowsAsync<AssertionException>(
-                () => Visual.Match("change-detection"));
+                () => Visual.Match("change-detection", region: Wall));
 
             Assert.Contains(e.Message, "of pixels differ");
             Log(e.Message.Split('\n')[0]);

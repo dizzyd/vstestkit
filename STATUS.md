@@ -14,9 +14,8 @@ which is outside this repo):
 - [x] **3. Client tier** — client-side attach, the `ClientMain` input adapter,
       `Interact`, `Gui`, `Input`, `Shot`.
 - [x] **4. Skill + proof** — the `vintagestory-test` skill and a real suite for olla.
-- [ ] **5. Pixel baselines** — keyed by platform + `GL_RENDERER`. Unblocked: the
-      Linux box reports `NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2`, which is the key
-      a baseline would be filed under.
+- [~] **5. Visual baselines** — built and reliable *within a session*; a baseline
+      does not yet survive a fresh world. See below.
 
 ## Verified working (step 1)
 
@@ -107,6 +106,51 @@ not have:
 
 Both were invisible in the self-tests, which never advance the calendar against a
 block entity. Three of the seven olla tests would have passed vacuously.
+
+## Step 5: what works, and what does not
+
+**Within one session it is solid.** Repeated full runs on `vsclient.home`, 25
+passed each time: an unchanged scene differs by **0.026–0.038%** and one changed
+column of blocks by **8.6%**, against a 2% tolerance. Recording, comparing, diff
+images, renderer-keyed paths and region cropping all behave.
+
+**Across a fresh world it is not usable yet.** A baseline recorded in one session
+and compared after a reboot differs by ~30% full-frame, or ~6% with the region
+tightened onto the subject — still over tolerance, and the gap to the 8.6% signal
+is too small to raise the tolerance into. Same seed, same pinned date, same plot:
+the *built blocks* come out pixel-identical, but terrain colour differs (green in
+one world, yellow in the next) and glass panes disagree because they show that
+terrain through them.
+
+Ruled out along the way: the calendar (pinned absolutely, verified at hour 12 of
+day 500 in both), season and time-of-day, cloud rendering, weather, plot
+placement, chunk-mesh settling, and the client not being told about a server-side
+time change. Chunk meshes bake season at tesselation time, which is why the date
+is now pinned at RunGame before any client has chunks — that fixed a different
+instance of the same class of problem but not this one.
+
+So the feature is honest for interactive use — record and compare inside one
+`--keep` session while changing a renderer — and not yet for a baseline committed
+to the repo. No baselines are committed for that reason.
+
+Everything below was found by a comparison that should have been identical and
+was not. Each is a way a rendered world quietly changes underneath a test:
+
+| | |
+|---|---|
+| sky and cloud shadows | 35% of an unchanged frame. Comparison takes a region, defaulting to the middle half; clouds off in the template. |
+| plot slots from a counter | A test sat in a different plot under `--filter` than in a full run, so the horizon differed. Slots now hash the test name — FNV-1a, because `string.GetHashCode` is randomised per process. |
+| `hoursPerDay: 2400` | Inherited from vanilla creativebuilding. Silently breaks time-of-day commands: `/time set day` sets hour 12, which on a 2400-hour day is the middle of the night. Now 24. |
+| the calendar advancing | 42% of an unchanged frame, all of it ground, because the season had moved and recoloured the grass. The clock is frozen at startup. |
+| `/time set day` | Fast-forwards to the *next* such hour, so runs land on different absolute days and cloud shadow follows absolute time — 18% of the frame. Visual tests pin `World.SetCalendarTo`. |
+| a plausible-looking constant | `12000.5` is hour 0.5 of day 500, not midday. Both baselines were black rectangles full of stars, and one still passed because the capture matched it. |
+| capturing too early | Chunk meshing runs on its own threads; the first test of a run caught terrain part-built, worth 2% against a 0.5% tolerance. 20 ticks and 30 frames of settling now. |
+
+The tolerance is 2% from measurement rather than taste: 0.5% would have sat within
+a factor of two of NVIDIA's noise floor and flaked, which it duly did.
+
+Tests are run on Linux only. The macOS client tier works but is not dependable —
+the display must stay awake and the client has died silently mid-run.
 
 ## Notes for later steps
 

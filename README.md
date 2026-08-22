@@ -45,7 +45,7 @@ overrides it; `VSTK_GAME_VERSION=1.22.6` picks a specific install.
 | | |
 |---|---|
 | **Headless Linux** | The client tier's home. `docs/linux.md` covers setup and the traps. Push with `scripts/sync-linux.sh <user@host> [--mod DIR]`, then run over SSH. |
-| **macOS** | Fine for both tiers, and the better place to watch a test drive the game. The client opens a real window, which has to be awake and stay awake. |
+| **macOS** | Server tier only, in practice. The client tier works but is not dependable: the display must be awake and unlocked, sleeps during long sessions, and the client has died silently mid-run. Build here, run there. |
 
 ## Seeing what it drew
 
@@ -204,6 +204,9 @@ of letting it pass by luck. `await Until(cond, maxTicks)` beats guessing a count
 | `Gui.` *(client)* | `WaitFor<T>`, `WaitGone<T>`, `Require<T>`, `Find<T>`, `IsOpen<T>`, `OpenDialogs`, `CloseDialogs` |
 | `Input.` *(client)* | `Press`, `KeyDown/Up`, `Type`, `Click`, `MouseDown/Up`, `Hotkey`, `RawMouseDown/Up`, `MouseMove` |
 | `Shot.Take(path)` *(client)* | screenshot to a file |
+| `Visual.` *(client)* | `Match`, `Capture`, `Key`, `RendererName`, `Describe` |
+| `await World.SetCalendarTo(h)` | absolute calendar position - required for anything visual |
+| `World.SetTimeSpeed(s)`, `World.SetPrecipitation(p)` | let the clock or the weather run |
 | waiting | `Ticks(n)`, `Frames.Wait(n)`, `Until(cond)`, `Hours(h)` |
 | `Cmd("/give …")` | any chat command, as console or a named player |
 | `Assert.` | `Equal`, `True`, `Greater`, `Less`, `Close`, `InRange`, `Contains`, `NotNull`, `IsType<T>`, `Throws`, `ThrowsAsync`, `Fail` |
@@ -245,6 +248,52 @@ bash scripts/run.sh tests/mine --keep
 bash scripts/vstk raw tests.load '{"path": "/abs/path/tests/mine"}'
 bash scripts/vstk raw tests.run  '{"filter": "TheOneImFixing"}'
 ```
+
+## Visual baselines
+
+```csharp
+[VsTest, RequiresClient]
+public async Task TheOverlayLooksRight()
+{
+    await World.SetCalendarTo(500 * 24 + 12);   // absolute: midday on day 500
+    await Ticks(10);
+    ... build the scene, stand somewhere, aim ...
+
+    await Visual.Match("overlay");
+}
+```
+
+`Match` captures with the HUD hidden and compares against
+`baselines/<os>-<renderer>/<name>.png`. No baseline yet means one is recorded and
+the test passes with a note; `VSTK_UPDATE_BASELINES=1` overwrites deliberately. A
+failure writes the capture and a diff image with differing pixels marked and
+everything outside the compared region darkened.
+
+Baselines are **per renderer** because rendering genuinely differs: macOS runs a
+forward-compatible GL 4.1 context and Linux 4.6, `GLLineWidth` and `SmoothLines`
+are no-ops on Mac only, and the rasterisers differ regardless. One shared baseline
+would mean one machine is right and the rest are red. The recorded set here is
+from the Linux box.
+
+Only the middle half of the frame is compared by default. Sky and drifting cloud
+shadows are worth tens of percent of an unchanged frame; pass a `VisualRegion`,
+or `wholeFrame: true` when that is really what you mean.
+
+**Pin absolute time.** Not the time of day — `/time set day` fast-forwards to the
+*next* such hour, so runs land on different absolute days, and sun angle, season
+and cloud shadow all follow absolute time. `World.SetCalendarTo(hours)` is the
+whole fix, and time of day is `hours % 24`, so a number that merely looks like
+midday will photograph midnight.
+
+Measured on the GTX 1060: within a session an unchanged scene differs by
+0.03-0.04% and one changed column of blocks by 8.6%, against a 2% tolerance.
+
+**Across a fresh world this does not hold yet.** A baseline recorded in one
+session differs by ~6% after a reboot even framed tightly on the subject: the
+built blocks are pixel-identical but terrain colour differs between world
+instances, and glass shows that terrain through it. So record and compare inside
+one `--keep` session; a baseline committed to the repo will not survive a
+restart. `STATUS.md` records what has been ruled out.
 
 ## Testing a mod that adds content
 
