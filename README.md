@@ -269,6 +269,8 @@ bash scripts/run.sh tests/mine.csproj --mod ../olla/olla
 
 ## License
 
+Copyright (C) 2026 Dave (Dizzy) Smith.
+
 GPL-3.0-or-later. See `LICENSE`.
 
 Worth knowing before writing tests you intend to distribute: a test suite
