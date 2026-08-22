@@ -238,6 +238,8 @@ namespace VsTestkit
         {
             if (Hub.Sapi == null) throw new VerbException("server side is not attached", "no_server");
 
+            var hasClient = Hub.Capi != null;
+
             // Answer before the process goes away, or the caller sees a dropped
             // connection instead of an acknowledgement.
             var t = new Thread(() =>
@@ -245,6 +247,17 @@ namespace VsTestkit
                 Thread.Sleep(250);
                 try { Hub.Sapi?.Event.EnqueueMainThreadTask(() => Hub.Sapi?.Server.ShutDown(), "vstestkit-stop"); }
                 catch { }
+
+                // A headless server exits once its own shutdown completes. A
+                // singleplayer client does not: stopping the internal server
+                // drops it to the disconnected screen and it sits there, so
+                // stop.sh would wait out its timeout and SIGKILL every time.
+                // The data path is ephemeral, so there is nothing to lose by
+                // leaving directly.
+                if (!hasClient) return;
+
+                Thread.Sleep(2000);
+                Environment.Exit(0);
             }) { IsBackground = true, Name = "vstestkit-stop" };
             t.Start();
 

@@ -31,6 +31,7 @@ namespace VsTestkit
                 if (File.Exists(path) && path.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
                 {
                     cases = TestRunner.Load(path);
+                    TestRunner.SuiteDir = Path.GetDirectoryName(Path.GetFullPath(path));
                     source = "assembly";
                 }
                 else
@@ -38,6 +39,9 @@ namespace VsTestkit
                     var files = SourceSuite.Discover(path);
                     var image = SourceSuite.Compile(files, out var label);
                     cases = TestRunner.LoadImage(image, label);
+                    TestRunner.SuiteDir = Directory.Exists(path)
+                        ? Path.GetFullPath(path)
+                        : Path.GetDirectoryName(Path.GetFullPath(path));
                     source = $"{files.Count} source file(s)";
                 }
 

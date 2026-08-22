@@ -40,7 +40,12 @@ wc["SaveFileLocation"] = os.path.join(data, "Saves", "vstestkit.vcdbs")
 wc["WorldConfiguration"] = {
     "worldClimate": "superflat",
     "gameMode": "creative",
-    "hoursPerDay": "2400",
+    # Vanilla creativebuilding uses 2400 to make time effectively stand still,
+    # but that breaks every time-of-day command: "/time set day" sets hour 12,
+    # which on a 2400-hour day is the middle of the night. Lighting then depends
+    # on where the calendar happens to be, which ruins visual baselines and
+    # confuses anything else that cares about daylight.
+    "hoursPerDay": "24",
     "temporalStability": "false",
     "temporalStorms": "off",
     "temporalRifts": "off",

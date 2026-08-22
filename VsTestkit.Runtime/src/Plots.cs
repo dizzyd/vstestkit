@@ -38,6 +38,29 @@ namespace VsTestkit.Testing
         public static BlockPos Base(Vintagestory.API.Server.ICoreServerAPI sapi) =>
             new BlockPos(sapi.WorldManager.MapSizeX / 2, 0, sapi.WorldManager.MapSizeZ / 2, 0);
 
+        /// <summary>
+        /// A stable plot slot for a test, derived from its name.
+        ///
+        /// Not a running counter over the selected tests: that gives a test one
+        /// plot in a full run and a different one under --filter, so its
+        /// neighbours - and therefore anything visible on the horizon - change
+        /// with the selection. Visual baselines cannot survive that, and neither
+        /// can anyone trying to reproduce a failure by running one test.
+        ///
+        /// FNV-1a rather than string.GetHashCode, which is randomised per process
+        /// and would move every plot on each launch.
+        /// </summary>
+        public static int SlotFor(string testName)
+        {
+            unchecked
+            {
+                const uint offset = 2166136261, prime = 16777619;
+                var hash = offset;
+                foreach (var c in testName) { hash ^= c; hash *= prime; }
+                return (int)(hash % 4096);
+            }
+        }
+
         public static async Task<TestPlot> Prepare(int index, int size, int height)
         {
             var sapi = Vs.RequireServer();

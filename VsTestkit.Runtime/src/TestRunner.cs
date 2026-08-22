@@ -32,6 +32,13 @@ namespace VsTestkit.Testing
         public static IReadOnlyList<TestCase> Loaded => loaded;
         public static string LoadedPath => loadedPath;
 
+        /// <summary>
+        /// Where the suite came from. Visual baselines live under it, so they
+        /// travel with the tests that assert on them rather than with the machine
+        /// that happened to record them.
+        /// </summary>
+        public static string SuiteDir { get; set; }
+
         // ---------- loading ----------
 
         /// <summary>
@@ -130,7 +137,6 @@ namespace VsTestkit.Testing
             var sw = Stopwatch.StartNew();
 
             var selected = loaded.Where(t => Matches(t, filter)).ToList();
-            var plotIndex = 0;
 
             foreach (var tc in selected)
             {
@@ -156,7 +162,7 @@ namespace VsTestkit.Testing
                     continue;
                 }
 
-                summary.Tally(RunOne(tc, plotIndex++, summary));
+                summary.Tally(RunOne(tc, Plots.SlotFor(tc.FullName), summary));
             }
 
             summary.durationMs = sw.ElapsedMilliseconds;

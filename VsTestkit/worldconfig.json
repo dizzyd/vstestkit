@@ -5,12 +5,16 @@
       "playListCode": "creative",
       "langCode": "vstestkit-flat",
       "listOrder": 99,
-      "mods": ["game", "creative", "survival"],
+      "mods": [
+        "game",
+        "creative",
+        "survival"
+      ],
       "worldType": "superflat",
       "worldConfig": {
         "worldClimate": "superflat",
         "gameMode": "creative",
-        "hoursPerDay": "2400",
+        "hoursPerDay": "24",
         "cloudypos": "0.5",
         "temporalStability": "false",
         "temporalStorms": "off",

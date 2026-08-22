@@ -33,7 +33,11 @@ namespace VsTestkit
             sapi.Event.PlayerJoin += MarkCharacterChosen;
 
             // After the weather system exists.
-            sapi.Event.ServerRunPhase(EnumServerRunPhase.RunGame, () => StopTheWeather(sapi));
+            sapi.Event.ServerRunPhase(EnumServerRunPhase.RunGame, () =>
+            {
+                StopTheWeather(sapi);
+                StopTheClock(sapi);
+            });
         }
 
         /// <summary>
@@ -48,6 +52,31 @@ namespace VsTestkit
         ///
         /// Set VSTK_WEATHER=1 when the weather is the thing under test.
         /// </summary>
+        /// <summary>
+        /// Freezes the passage of time, unless VSTK_TIME=1.
+        ///
+        /// A world where the clock runs is a world where the answer changes while
+        /// you are not looking: lighting shifts, and over a longer run so does the
+        /// season, which recolours the grass. That last one is not hypothetical -
+        /// it made two captures of an identical scene differ by 42% of their
+        /// pixels, all of it ground.
+        ///
+        /// This is the same thing /time stop does. Hours() still works, because it
+        /// calls Calendar.Add directly: time passes when a test says so and not
+        /// otherwise, which is what a test wants.
+        /// </summary>
+        static void StopTheClock(ICoreServerAPI sapi)
+        {
+            if (Environment.GetEnvironmentVariable("VSTK_TIME") == "1")
+            {
+                Hub.Logger?.Notification("[vstestkit] leaving the clock running (VSTK_TIME=1)");
+                return;
+            }
+
+            sapi.World.Calendar.SetTimeSpeedModifier("baseline", 0f);
+            Hub.Logger?.Notification("[vstestkit] time frozen (VSTK_TIME=1 to let it run)");
+        }
+
         static void StopTheWeather(ICoreServerAPI sapi)
         {
             if (Environment.GetEnvironmentVariable("VSTK_WEATHER") == "1")

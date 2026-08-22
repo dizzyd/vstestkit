@@ -6,6 +6,7 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>bin\$(Configuration)</OutputPath>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +28,11 @@
     </Reference>
     <Reference Include="VSSurvivalMod">
       <HintPath>$(VINTAGE_STORY)/Mods/VSSurvivalMod.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <!-- Image comparison for visual baselines. The game ships it already. -->
+    <Reference Include="SkiaSharp">
+      <HintPath>$(VINTAGE_STORY)/Lib/SkiaSharp.dll</HintPath>
       <Private>false</Private>
     </Reference>
     <Reference Include="VSEssentials">

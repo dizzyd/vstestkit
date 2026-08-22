@@ -6,7 +6,7 @@
     "windowBorder": 0,
     "maxFps": 60,
     "vsyncMode": 0,
-    "viewDistance": 96,
+    "viewDistance": 32,
     "masterSoundLevel": 0,
     "musicLevel": 0,
     "soundLevel": 0,
@@ -14,7 +14,8 @@
     "entitySoundLevel": 0,
     "weatherSoundLevel": 0,
     "shadowMapQuality": 0,
-    "mipmapLevel": 0
+    "mipmapLevel": 0,
+    "cloudRenderMode": 0
   },
   "boolSettings": {
     "pauseGameOnLostFocus": false,

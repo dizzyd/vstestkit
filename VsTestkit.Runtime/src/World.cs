@@ -240,6 +240,17 @@ namespace VsTestkit.Testing
             return true;
         }
 
+        /// <summary>
+        /// Sets how fast time passes; 0 stops it, 60 is the vanilla default.
+        ///
+        /// The harness freezes the clock at startup so a scene does not change
+        /// while nothing is looking at it. Set it deliberately when the passage
+        /// of time is what a test is about - though Hours() is usually the better
+        /// tool, since it advances the calendar by an exact amount immediately.
+        /// </summary>
+        public static void SetTimeSpeed(float speed) =>
+            Vs.RequireServer().World.Calendar.SetTimeSpeedModifier("baseline", speed);
+
         // ---------- weather ----------
 
         /// <summary>
