@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 dizzyd
 using System.Threading.Tasks;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;

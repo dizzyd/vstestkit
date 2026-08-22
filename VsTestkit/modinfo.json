@@ -2,10 +2,15 @@
   "type": "code",
   "modid": "vstestkit",
   "name": "VS Testkit",
-  "authors": ["dizzyd"],
+  "authors": [
+    "dizzyd"
+  ],
+  "license": "GPL-3.0-or-later",
   "description": "Test harness endpoint. Exposes a loopback RPC for driving a running game. Development tool - never enable on a real server.",
   "version": "0.1.0",
   "side": "universal",
   "requiredOnClient": false,
-  "dependencies": { "game": "1.22.0" }
+  "dependencies": {
+    "game": "1.22.0"
+  }
 }

@@ -266,3 +266,14 @@ bash scripts/run.sh tests/mine.csproj --mod ../olla/olla
 ```
 
 `--mods DIR` and `--origin DIR` are the explicit forms.
+
+## License
+
+GPL-3.0-or-later. See `LICENSE`.
+
+Worth knowing before writing tests you intend to distribute: a test suite
+references **`VsTestkit.Runtime`**, and linking a GPL library generally makes the
+linking work a derivative of it. For suites living alongside your own mods that
+is a non-issue. If you ever want third parties to write and ship test suites
+under their own terms, the thing to change is `VsTestkit.Runtime` to LGPL-3.0 —
+the mod, the scripts and the runner can stay GPL, because nothing links those.
