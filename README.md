@@ -1,37 +1,51 @@
 # vstestkit
 
-A loopback RPC endpoint inside a running Vintage Story instance, so a mod can be
-driven and questioned from the outside — interactively while debugging, and (from
-step 2 on) as a compiled test suite.
+Runs a real Vintage Story instance and drives it: place blocks, act as a player,
+open GUIs, take screenshots, assert on live world state.
+
+A green build proves very little about a mod. Most of what breaks between game
+versions — Harmony patches aimed at moved methods, string and reflection lookups,
+block entity behaviour — compiles perfectly and fails in-world. That is what this
+is for.
 
 **Development tool.** `/eval` compiles and runs arbitrary C# in the game process.
 The endpoint stays off unless `VSTESTKIT=1` is in the environment. Never enable it
 on a real server.
 
-Status: **step 2 — compiled test suites, headless server.** See `STATUS.md`.
-
 ## Quick start
 
-Run a suite — builds, boots, runs, reports, tears down, exits non-zero on failure:
+Build, boot, run, report, tear down. Non-zero exit on failure.
 
 ```bash
-bash scripts/run.sh tests/selftest/selftest.csproj
-bash scripts/run.sh path/to/mod.tests.csproj --mod ../olla/olla --filter Moisture
-bash scripts/run.sh <...> --keep        # leave the session up to poke at
+bash scripts/run.sh tests/selftest                      # headless
+bash scripts/run.sh tests/selftest --client             # with a real client
+bash scripts/run.sh ../olla/tests --mod ../olla/olla    # a mod under test
+bash scripts/run.sh <tests> --filter Moisture --keep    # one test, session left up
 ```
+
+Tests are plain `.cs` files, compiled inside the game by the Roslyn it already
+carries. There is no build step for a suite and no .NET SDK needed on the machine
+running it.
 
 Or drive a session by hand:
 
 ```bash
-bash scripts/build.sh          # builds into VsTestkit/bin/Debug/Mods
-bash scripts/boot.sh           # fresh flat world, fixed seed, ~6s
+bash scripts/boot.sh                # headless, fresh flat world, ~6s
+bash scripts/boot.sh --client       # singleplayer: both sides, one process, ~15s
 bash scripts/vstk info
 bash scripts/stop.sh
 ```
 
 `boot.sh` resolves the game install through **Cairn** (`scripts/cairn-env.sh`),
-which knows each install's architecture and required .NET. Set `VINTAGE_STORY`
-to override, or `VSTK_GAME_VERSION=1.22.6` to pick a specific install.
+which knows each install's architecture and required .NET. `VINTAGE_STORY`
+overrides it; `VSTK_GAME_VERSION=1.22.6` picks a specific install.
+
+## Where to run it
+
+| | |
+|---|---|
+| **Headless Linux** | The client tier's home. `docs/linux.md` covers setup and the traps. Push with `scripts/sync-linux.sh <user@host> [--mod DIR]`, then run over SSH. |
+| **macOS** | Fine for both tiers, and the better place to watch a test drive the game. The client opens a real window, which has to be awake and stay awake. |
 
 ## Seeing what it drew
 
@@ -40,19 +54,20 @@ VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh      # -> shots/<time>.png
 bash scripts/look.sh -o /tmp/now.png                     # local session
 ```
 
-Captures the running session and, for a remote box, copies the image back. This
-is what makes iterating on a headless machine bearable: the alternative is
-asserting about pixels you have never seen.
+Captures the running client and, for a remote box, copies the image back. This is
+what makes iterating on a headless machine bearable: the alternative is asserting
+about pixels nobody has looked at.
 
-Two things to set before a capture is worth looking at, because neither is the
-harness's business to guess:
+Set the scene first, because neither of these is the harness's business to guess —
+a fresh client faces an arbitrary direction, and a night shot is a black
+rectangle:
 
 ```bash
-bash scripts/vstk cmd "/time set day"    # a night shot is a black rectangle
+bash scripts/vstk cmd "/time set day"
 ```
 
-and point the camera - `Interact.LookAt(pos)` in a test, since a fresh client
-faces wherever it happens to face.
+and aim: `Interact.LookAt(pos)` in a test, or set the player's `Pos.Yaw/Pitch`
+from `eval`.
 
 ## Verbs
 
@@ -62,127 +77,90 @@ vstk info                                  # sides attached, run phase, seed, pl
 vstk cmd "/time set day"                   # any chat command, structured result
 vstk cmd "/gamemode creative" --as Bob     # ...as a specific player
 vstk eval 'sapi.WorldManager.Seed'         # expression
+vstk eval --side client '...'              # on the client thread
 vstk eval -f snippet.cs                    # or from a file
-vstk eval --side client '...'              # (step 3)
 vstk shot -o /tmp/x.png                    # screenshot the running client
 vstk log --lines 40 --grep vstestkit
 vstk stop
-vstk raw <verb> '<json>'
+vstk raw <verb> '<json>'                   # tests.load, tests.run, session.save, …
 ```
 
-`eval` also reads a snippet from stdin, which is the nicest way to write more than
-one line:
+`eval` also reads from stdin, which is the nicest way to write more than one line:
 
 ```bash
 bash scripts/vstk eval <<'SNIP'
-var spawn = sapi.World.DefaultSpawnPosition.AsBlockPos;
-int y = sapi.World.BlockAccessor.GetTerrainMapheightAt(spawn);
-return new { spawn = spawn.ToString(), surfaceY = y };
+var middle = new BlockPos(sapi.WorldManager.MapSizeX / 2, 0, sapi.WorldManager.MapSizeZ / 2, 0);
+int y = sapi.World.BlockAccessor.GetTerrainMapheightAt(middle);
+return new { middle = middle.ToString(), surfaceY = y };
 SNIP
 ```
 
-Snippets are compiled by the Roslyn the game already ships to build source mods,
-against **every assembly currently loaded** — so the mod under test is in scope
-automatically, with no configuration. Results are cached by snippet hash: first
-call ~150ms, repeats ~0ms.
-
-A snippet may be a bare expression or a statement body; the evaluator tries
-expression form first and falls back, so you never have to say which.
+Snippets compile against **every assembly currently loaded**, so the mod under
+test is in scope with no configuration. Cached by snippet hash: ~150ms the first
+time, ~0ms after. A snippet may be a bare expression or a statement body; the
+evaluator tries expression form first, so you never have to say which.
 
 ## The test world
 
 `boot.sh` creates a fresh world per run at a fixed seed (`VSTK_SEED`, default
-424242) using the **`vstestkit-flat`** playstyle that this mod declares in
+424242) using the **`vstestkit-flat`** playstyle this mod declares in
 `VsTestkit/worldconfig.json`.
 
 It exists because vanilla `creativebuilding` loads only `game` + `creative` — so
-survival content would not be in the world at all, and a mod like olla (which
-patches farmland) could not be tested on it. `vstestkit-flat` is `superflat`
+survival content would not be in the world at all, and a mod like olla, which
+patches farmland, could not be tested on it. `vstestkit-flat` is `superflat`
 worldgen with `["game", "creative", "survival"]` loaded: instant, deterministic,
-and with the content mods actually extend.
+and carrying the content mods actually extend.
 
 Terrain is the three layers from `assets/creative/worldgen/layers.json` —
 claystone, then soil — with the surface at y=2.
 
+**Precipitation is pinned to 0.** Sky-exposed farmland absorbs every hour of rain
+since its last update, so advancing the calendar would wet soil regardless of what
+a test did. `VSTK_WEATHER=1`, or `World.SetPrecipitation(x)`, when rain is the
+subject.
+
 **The world origin is the middle of the map, not 0,0.** The default map is
-1024000 wide, so the middle is around `512000, 2, 512000` and a block written at
-`0,0,0` lands in an unloaded chunk and silently reads back as air. Inside a test,
-use `P(x,y,z)`, which is plot-relative. From `eval`, work relative to
+1024000 wide, so the middle is around `512000, 2, 512000`, and a block written at
+`0,0,0` lands in an unloaded chunk and silently reads back as air. Inside a test
+use `P(x,y,z)`, which is plot-relative; from `eval`, work from
 `sapi.WorldManager.MapSizeX / 2`.
 
-Not `World.DefaultSpawnPosition`: for the first moments after world creation it
+Not `World.DefaultSpawnPosition` — for the first moments after world creation it
 throws, because `SaveGameData.DefaultSpawn` and `mapMiddleSpawnPos` are both null
 and `EntityPosFromSpawnPos` dereferences the result.
 
-## The Claude Code skill
-
-`skill/SKILL.md` is the source of truth; install it with
-
-```bash
-bash scripts/install-skill.sh
-```
-
-which copies it to `~/.claude/skills/vintagestory-test`. Copied, not symlinked:
-a symlinked skill directory is not picked up by the skill scanner, and an install
-that is silently invisible beats drift for sheer unhelpfulness.
-
-Drift is the price, so re-run it after editing `skill/SKILL.md`, or check:
-
-```bash
-bash scripts/install-skill.sh --check
-```
-
-## Layout
-
-```
-VsTestkit/          the mod (universal side)
-  src/              endpoint, dispatch, verbs, evaluator
-  worldconfig.json  declares the vstestkit-flat playstyle
-scripts/
-  cairn-env.sh      resolve a Cairn-managed install into the environment
-  build.sh boot.sh stop.sh vstk
-run/current/        ephemeral data path for the live session (gitignored)
-```
-
-## How it talks to the game
-
-`HttpListener` on `127.0.0.1`, gated on a per-run token. Both are published to
-`<dataPath>/.vstestkit` so scripts discover the session without being told the
-port.
-
-Every verb marshals onto the correct game main thread via
-`IEventAPI.EnqueueMainThreadTask` and waits for the result. Reading game state
-straight off the HTTP thread is a race — the kind that shows up as an
-intermittent test failure rather than a crash.
-
-In singleplayer (step 3) the client-side and server-side mod loaders resolve the
-*same* assembly, because `ModAssemblyLoader` uses `Assembly.UnsafeLoadFrom` into
-the default load context. So one endpoint reaches both sides through the shared
-statics in `Hub`.
-
 ## Writing tests
 
-A test project references `VsTestkit.Runtime` and the mod under test, and nothing
-else. `tests/selftest` is the worked example.
+A suite is a directory of `.cs` files. `tests/selftest` tests the harness itself;
+`../olla/tests` is a real suite against a real mod.
 
 ```csharp
+using VsTestkit.Testing;
 using static VsTestkit.Testing.Vs;
 
-public class MoistureTests
+public class Irrigation
 {
-    [VsTest]
-    public async Task OllaWetsAdjacentFarmland()
+    [VsTest(TimeoutMs = 90000)]
+    public async Task BuriedOllaMoistensNearbyFarmland()
     {
-        World.SetBlock("game:soil-medium-none", P(0, 0, 0));
-        World.SetBlock("olla:olla-fired-red-normal", P(0, 1, 0));
+        World.SetBlock("game:farmland-dry-medium", P(8, 0, 8));
+        World.SetBlock("olla:olla-fired-red-buried", P(9, 0, 8));
+        await Ticks(4);
 
-        await Ticks(200);
+        World.BE<olla.BlockEntityOllaFired>(P(9, 0, 8)).TryAddWater(60);
 
-        var fl = BE<BlockEntityFarmland>(P(0, 0, 0));
-        Assert.Greater(fl.MoistureLevel, 0.5f);
+        await World.TickNow(P(9, 0, 8));   // baseline firing
+        await Hours(12);
+        await World.TickNow(P(9, 0, 8));   // does the work
+
+        Assert.Greater(World.BE<BlockEntityFarmland>(P(8, 0, 8)).MoistureLevel, 0f);
     }
 }
 ```
+
+An accompanying `.csproj` is optional and exists only so an editor can type-check
+against the mod and the game; nothing builds it to run the suite.
 
 ### The one rule
 
@@ -190,82 +168,152 @@ public class MoistureTests
 safe to touch live block entities, inventories and GUI dialogs directly. Only
 `await` releases the thread.
 
-So: never `Task.Run`, never `.Result`, never a raw thread. If you find yourself
-off the game thread, `await OnServer()` (or `OnClient()`) to get back. Helpers
-check, and say so rather than racing.
+So: never `Task.Run`, never `.Result`, never `GetAwaiter().GetResult()` — blocking
+deadlocks against the very thread the continuation needs. Use `Assert.ThrowsAsync`.
+If you end up off-thread, `await OnServer()` or `await OnClient()` to get back.
+Helpers check their side and say so rather than racing.
 
-**Time is three different clocks, and only one of them is the calendar.**
-`Hours(n)` is `Calendar.Add` and costs nothing. Tick listeners, though, are measured
-against a real-time `Stopwatch`, so `/time speed` and `CalendarSpeedMul` do not
-accelerate them at all — use `await World.TickNow(pos)` to fire a block entity's
-listeners immediately. Rendering is a third clock again; see `Frames.Wait`.
+### Time is three clocks
 
-**Wait on ticks, never on wall-clock.** `await Ticks(n)` advances only when the
-game loop does, so a stalled or throttled game blocks the test instead of letting
-it pass by luck. `await Until(() => ..., maxTicks)` is better still when the
-timing is not exactly known. `Task.Delay` in a test is a bug.
+**The calendar** is free: `Hours(n)` is `Calendar.Add`.
+
+**Tick listeners** are measured against a real-time `Stopwatch`, so `/time speed`
+and `CalendarSpeedMul` accelerate the calendar and nothing else — a 5-second
+listener costs 5 real seconds. `await World.TickNow(pos)` fires a block entity's
+listeners on demand instead. A listener working from `Calendar.TotalHours` deltas
+usually needs one firing to take a baseline and another to act, so advance the
+calendar *between* two.
+
+**Rendering** is a third clock. Block selection and held mouse buttons are handled
+in a render callback, and a throttled window renders far slower than it ticks, so
+anything the *renderer* must observe waits on `Frames.Wait(n)`.
+
+And in general: **wait on ticks or frames, never wall-clock.** `await Ticks(n)`
+advances only when the game loop does, so a stalled game blocks the test instead
+of letting it pass by luck. `await Until(cond, maxTicks)` beats guessing a count.
+`Task.Delay` in a test is a bug.
 
 ### What you get
 
 | | |
 |---|---|
 | `P(x,y,z)` | position in this test's plot; `(0,0,0)` is the ground block |
-| `World.` | `SetBlock`, `GetBlock`, `BlockCode`, `Fill`, `BE<T>`, `BEOrNull<T>`, `SpawnEntity`, `Entities`, `Stack`, `GroundY`, `LoadArea` |
-| `Ticks(n)`, `Until(cond)`, `Hours(h)` | waiting |
-| `World.TickNow(pos)` | fire a block entity's tick listeners now, instead of waiting out a real-time interval |
-| `Cmd("/give ...")` | any chat command, as console or a named player |
-| `BE<T>(pos)` | block entity, with a message naming what was actually there |
-| `Assert.` | `Equal`, `True`, `Greater`, `Close`, `Contains`, `Throws`, `NotNull`, … |
-| `Log("...")` | a line in this test's report entry |
+| `World.` | `SetBlock`, `GetBlock`, `BlockCode`, `Block`, `Fill`, `BE<T>`, `BEOrNull<T>`, `SpawnEntity`, `Entities`, `Stack`, `GroundY`, `LoadArea`, `TickNow`, `SetPrecipitation` |
+| `Player.` | `Me`, `StandNear`, `Teleport`, `Hold`, `Held`, `SetGameMode` |
+| `Interact.` *(client)* | `Aim`, `UseBlock`, `BreakBlock`, `LookAt` |
+| `Gui.` *(client)* | `WaitFor<T>`, `WaitGone<T>`, `Require<T>`, `Find<T>`, `IsOpen<T>`, `OpenDialogs`, `CloseDialogs` |
+| `Input.` *(client)* | `Press`, `KeyDown/Up`, `Type`, `Click`, `MouseDown/Up`, `Hotkey`, `RawMouseDown/Up`, `MouseMove` |
+| `Shot.Take(path)` *(client)* | screenshot to a file |
+| waiting | `Ticks(n)`, `Frames.Wait(n)`, `Until(cond)`, `Hours(h)` |
+| `Cmd("/give …")` | any chat command, as console or a named player |
+| `Assert.` | `Equal`, `True`, `Greater`, `Less`, `Close`, `InRange`, `Contains`, `NotNull`, `IsType<T>`, `Throws`, `ThrowsAsync`, `Fail` |
+| `Log("…")` | a line in this test's report entry |
 | `OnServer()`, `OnClient()` | switch game threads |
 
-Attributes: `[VsTest(TimeoutMs = ...)]`, `[RequiresClient]` (skipped, not failed,
-on a headless run), `[Skip("why")]`, `[PlotSize(n, height)]`, `[BeforeEach]`,
+Attributes: `[VsTest(TimeoutMs = …)]`, `[RequiresClient]` (skipped, not failed, on
+a headless run), `[Skip("why")]`, `[PlotSize(n, height)]`, `[BeforeEach]`,
 `[AfterEach]`.
+
+Client-side helpers hop to the client thread and return you to the side you
+started on, so a test can stay on the server thread and still click things.
 
 ### Plots
 
 Every test gets its own 16x32x16 patch of world, cleared and floored before it
-runs, 48 blocks from its neighbours. Tests share one world — regenerating per test
-would dominate the run — so isolation is spatial. Tests run **serially**, on
-purpose: a parallel run would trade a few seconds for failures that depend on
-interleaving.
+runs, 48 blocks from its neighbours, with the player placed in it when a client is
+attached. Tests share one world — regenerating per test would dominate the run —
+so isolation is spatial. Tests run **serially**, on purpose: a parallel run would
+trade a few seconds for failures that depend on interleaving.
+
+Plot setup loads a **one-chunk margin** around the plot. `IsFullyLoadedChunk` is
+`ServerChunk.NotAtEdge`, which wants all eight surrounding chunk columns; vanilla
+farmland guards its tick that way and mods copy the idiom, so without the margin
+such code never runs and the mod merely *looks* inert.
+
+Client UI state is reset between tests too. A dialog left open by one test is not
+just untidy: any dialog preferring an ungrabbed mouse switches world interaction
+off, and the next test then aims at things and selects nothing.
 
 ### Iterating
 
-`--keep` leaves the session up. Rebuild the test project and reload it into the
-running game — test assemblies load into a collectible context, from a byte copy
-rather than the file, so a rebuilt suite replaces the old one without a restart:
+`--keep` leaves the session up. Edit the sources and reload — suites load into a
+collectible context, so a changed suite replaces the old one without a restart:
 
 ```bash
-bash scripts/run.sh tests/mine.csproj --keep
+bash scripts/run.sh tests/mine --keep
 # edit, then:
-dotnet build tests/mine.csproj -c Debug
-bash scripts/vstk raw tests.load '{"path": ".../mine.dll"}'
+bash scripts/vstk raw tests.load '{"path": "/abs/path/tests/mine"}'
 bash scripts/vstk raw tests.run  '{"filter": "TheOneImFixing"}'
-```
-
-## A worked example
-
-`../olla/tests` is a real suite against a real mod — including a test that calls
-the protected method olla's Harmony patch postfixes, which is exactly the kind of
-thing that survives a game update by compiling and doing nothing.
-
-```bash
-bash scripts/run.sh ../olla/tests --mod ../olla/olla
 ```
 
 ## Testing a mod that adds content
 
 Mods in this workspace build code into `bin/<config>/Mods` but leave assets in the
 source tree, so a content mod loaded by `--addModPath` alone registers **no blocks
-at all**. `--mod <project-dir>` handles both:
+at all**. `--mod <project-dir>` supplies both:
 
 ```bash
-bash scripts/run.sh tests/mine.csproj --mod ../olla/olla
+bash scripts/run.sh ../olla/tests --mod ../olla/olla
 ```
 
 `--mods DIR` and `--origin DIR` are the explicit forms.
+
+## The Claude Code skill
+
+`skill/SKILL.md` is the source of truth; install it with
+
+```bash
+bash scripts/install-skill.sh
+bash scripts/install-skill.sh --check    # report drift
+```
+
+which copies it to `~/.claude/skills/vintagestory-test`. Copied, not symlinked: a
+symlinked skill directory is not picked up by the skill scanner, and an install
+that is silently invisible beats drift for sheer unhelpfulness.
+
+## How it talks to the game
+
+`HttpListener` on `127.0.0.1`, gated on a per-run token. Both are published to
+`<dataPath>/.vstestkit` so scripts find the session without being told the port.
+
+Every verb marshals onto the correct game main thread via
+`IEventAPI.EnqueueMainThreadTask` and waits for the result. Reading game state
+straight off the HTTP thread is a race — the kind that surfaces as an intermittent
+test failure rather than a crash.
+
+In singleplayer the client-side and server-side mod loaders resolve the *same*
+assembly, because `ModAssemblyLoader` uses `Assembly.UnsafeLoadFrom` into the
+default load context. So one endpoint reaches both sides through the shared
+statics in `Hub`. (The same fact bites mods: `ModSystem.Start()` runs once per
+side, so a `Harmony.PatchAll()` there registers every patch twice.)
+
+The client runs **offline**: the proxy variables are pointed at a closed port for
+that process, which fails the session check and takes
+`EnumAuthServerResponse.Offline`, so the test client never validates a session and
+cannot invalidate the login you play with. `VSTK_ONLINE=1` disables that.
+
+## Layout
+
+```
+VsTestkit/            the mod (universal side)
+  src/                endpoint, dispatch, verbs, evaluator, session prep
+  worldconfig.json    declares the vstestkit-flat playstyle
+VsTestkit.Runtime/    the public test API: Vs, World, Player, Interact, Gui, Assert
+tests/selftest/       the harness testing itself
+skill/                the vintagestory-test skill
+scripts/
+  run.sh              build, boot, run, report, tear down
+  boot.sh stop.sh     session lifecycle       vstk        talk to a session
+  look.sh             screenshot, locally or over SSH
+  cairn-env.sh        resolve a Cairn-managed install
+  display.sh          native / existing / xvfb / wayland-headless
+  sync-linux.sh       push repo and mods to a test box
+  linux-doctor.sh     check a Linux box for what the client tier needs
+  install-skill.sh    install the Claude Code skill
+templates/            clientsettings.json seed for an ephemeral data path
+docs/linux.md         headless Linux setup
+run/current/          ephemeral data path for the live session (gitignored)
+```
 
 ## License
 
@@ -275,7 +323,7 @@ GPL-3.0-or-later. See `LICENSE`.
 
 Worth knowing before writing tests you intend to distribute: a test suite
 references **`VsTestkit.Runtime`**, and linking a GPL library generally makes the
-linking work a derivative of it. For suites living alongside your own mods that
-is a non-issue. If you ever want third parties to write and ship test suites
-under their own terms, the thing to change is `VsTestkit.Runtime` to LGPL-3.0 —
-the mod, the scripts and the runner can stay GPL, because nothing links those.
+linking work a derivative of it. For suites living alongside your own mods that is
+a non-issue. If you ever want third parties to write and ship test suites under
+their own terms, the thing to change is `VsTestkit.Runtime` to LGPL-3.0 — the mod,
+the scripts and the runner can stay GPL, because nothing links those.

@@ -1,6 +1,11 @@
 # Status
 
-Build order from the design (`TESTKIT-DESIGN.md` in the anego-1.22 workspace):
+Steps 1–4 are done and verified on both macOS and headless Linux; step 5 is not
+started. Each section below records what that step actually proved, and the traps
+found doing it — they are history, not a plan.
+
+Build order from the design (`TESTKIT-DESIGN.md` in the anego-1.22 workspace,
+which is outside this repo):
 
 - [x] **1. Endpoint** — mod skeleton, HttpListener, `cmd`, `eval`, `vstk` CLI,
       boot/teardown. Headless server only.
@@ -9,8 +14,9 @@ Build order from the design (`TESTKIT-DESIGN.md` in the anego-1.22 workspace):
 - [x] **3. Client tier** — client-side attach, the `ClientMain` input adapter,
       `Interact`, `Gui`, `Input`, `Shot`.
 - [x] **4. Skill + proof** — the `vintagestory-test` skill and a real suite for olla.
-- [ ] **5. Pixel baselines** — keyed by platform + `GL_RENDERER`, once a Linux box
-      reports one.
+- [ ] **5. Pixel baselines** — keyed by platform + `GL_RENDERER`. Unblocked: the
+      Linux box reports `NVIDIA GeForce GTX 1060 6GB/PCIe/SSE2`, which is the key
+      a baseline would be filed under.
 
 ## Verified working (step 1)
 
