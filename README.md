@@ -114,6 +114,18 @@ Not `World.DefaultSpawnPosition`: for the first moments after world creation it
 throws, because `SaveGameData.DefaultSpawn` and `mapMiddleSpawnPos` are both null
 and `EntityPosFromSpawnPos` dereferences the result.
 
+## The Claude Code skill
+
+`skill/SKILL.md` is the source of truth; install it with
+
+```bash
+bash scripts/install-skill.sh
+```
+
+which symlinks it into `~/.claude/skills/vintagestory-test`. A symlink rather than
+a copy so the repo stays canonical - a copy drifts, and the drifted one is what
+gets read.
+
 ## Layout
 
 ```
