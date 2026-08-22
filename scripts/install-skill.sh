@@ -2,11 +2,15 @@
 #
 # Install the vintagestory-test skill for Claude Code.
 #
-#   bash scripts/install-skill.sh
+#   bash scripts/install-skill.sh          install or update
+#   bash scripts/install-skill.sh --check  report drift, install nothing
 #
-# Symlinks rather than copies, so the repo stays the single source of truth and
-# an edit here takes effect immediately. A copy drifts, and the drifted version
-# is the one that gets read.
+# Copies rather than symlinks. Symlinked skill directories are not picked up by
+# the skill scanner - a symlinked install is silently invisible, which is a worse
+# failure than drift because nothing tells you.
+#
+# The cost of copying is that the installed copy can fall behind the repo, so
+# --check exists to catch that, and this script is safe to re-run any time.
 #
 source "$(dirname "$0")/common.sh"
 
@@ -14,18 +18,21 @@ SRC="$VSTK_ROOT/skill"
 DEST="${VSTK_SKILL_DIR:-$HOME/.claude/skills}/vintagestory-test"
 
 [ -f "$SRC/SKILL.md" ] || die "no $SRC/SKILL.md"
-mkdir -p "$(dirname "$DEST")"
 
-if [ -L "$DEST" ]; then
-    rm "$DEST"
-elif [ -e "$DEST" ]; then
-    BACKUP="$DEST.replaced.$(date +%s)"
-    mv "$DEST" "$BACKUP"
-    echo "moved the existing skill aside: $BACKUP"
+if [ "${1:-}" = "--check" ]; then
+    [ -f "$DEST/SKILL.md" ] || { echo "not installed: $DEST"; exit 1; }
+    if diff -q "$SRC/SKILL.md" "$DEST/SKILL.md" >/dev/null; then
+        echo "up to date: $DEST"
+        exit 0
+    fi
+    echo "installed skill differs from the repo; re-run without --check" >&2
+    diff -u "$DEST/SKILL.md" "$SRC/SKILL.md" | head -40 >&2
+    exit 1
 fi
 
-ln -s "$SRC" "$DEST"
-echo "linked $DEST -> $SRC"
+# A previous symlinked install has to go, or the copy lands inside the repo.
+[ -L "$DEST" ] && rm "$DEST"
 
-# If symlinked skills ever stop being picked up, copying is the fallback:
-#   cp -R "$SRC/." "$DEST/"
+mkdir -p "$DEST"
+cp "$SRC/SKILL.md" "$DEST/SKILL.md"
+echo "installed $DEST/SKILL.md"

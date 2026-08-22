@@ -122,9 +122,15 @@ and `EntityPosFromSpawnPos` dereferences the result.
 bash scripts/install-skill.sh
 ```
 
-which symlinks it into `~/.claude/skills/vintagestory-test`. A symlink rather than
-a copy so the repo stays canonical - a copy drifts, and the drifted one is what
-gets read.
+which copies it to `~/.claude/skills/vintagestory-test`. Copied, not symlinked:
+a symlinked skill directory is not picked up by the skill scanner, and an install
+that is silently invisible beats drift for sheer unhelpfulness.
+
+Drift is the price, so re-run it after editing `skill/SKILL.md`, or check:
+
+```bash
+bash scripts/install-skill.sh --check
+```
 
 ## Layout
 
