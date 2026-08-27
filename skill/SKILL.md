@@ -28,7 +28,8 @@ mod's code and its assets — mods here build code to `bin/<config>/Mods` but le
 in the source tree, and a content mod loaded without its assets registers no blocks at
 all.
 
-Exit code is non-zero on failure. The report lands in `run/current/results/`.
+Exit code is non-zero on failure. The report lands in `run/<slot>/results/` (`run/current`
+for the unnamed `default` slot).
 
 ## Where to run it
 
@@ -39,8 +40,30 @@ Exit code is non-zero on failure. The report lands in `run/current/results/`.
 
 ```bash
 bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../olla/olla
-ssh dizzyd@vsclient.home 'cd vstestkit && bash scripts/run.sh ../olla/tests --mod ~/mods/olla/olla'
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh ~/mods/olla/tests --mod ~/mods/olla/olla --client'
 ```
+
+### The box is shared, so work in a slot
+
+Several mods get tested at once on that one box. A **slot** is one tenant: its own
+checkout, run directory, game port and display. `sync-linux.sh --mod ../olla/olla` names
+the slot after the mod and pushes to `~/vstestkit-olla`, and everything run from inside
+that tree inherits the slot from its directory name — so there is nothing to remember
+beyond `cd` ing into the right one.
+
+```bash
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/slots'   # who else is on the box
+```
+
+- **Never run another mod's tests from another mod's tree.** Same tree means same slot,
+  and `run.sh` will happily reuse that session — loading your suite into a game that
+  never loaded your mod, interleaved with whatever is already running there.
+- A slot already live refuses a second boot. `scripts/stop.sh` in that tree ends it.
+- **The client tier is capped at 3 concurrent sessions** box-wide (`VSTK_MAX_CLIENTS`).
+  Over the cap, a `--client` boot queues rather than failing; `VSTK_WAIT=0` fails fast
+  instead. Server-tier sessions are not capped.
+- `sync-linux.sh` refuses to push into a slot with a live session — stop it first, or
+  `--force`.
 
 ## Writing a test
 
@@ -143,7 +166,7 @@ tolerance 2%.
 ## Seeing the screen
 
 ```bash
-VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh     # -> shots/<time>.png
+VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh --slot olla   # -> shots/<time>.png
 ```
 
 Captures the running client and copies the PNG back. Set the scene first — a fresh client

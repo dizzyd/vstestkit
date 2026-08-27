@@ -8,7 +8,12 @@ path = os.path.join(data, "serverconfig.json")
 cfg = json.load(open(path))
 
 # An ephemeral single-purpose server: off the network, no auth, no advertising.
-cfg["Port"] = 42420
+#
+# The port is reserved per session rather than fixed, because a box running two
+# slots at once has two servers on it - singleplayer included, which runs a real
+# one on a real socket. A fixed 42420 kills the second in startSockets with a
+# bare "Address already in use" and a crash log that says nothing about ports.
+cfg["Port"] = int(os.environ.get("VSTK_GAME_PORT", "42420"))
 cfg["Ip"] = "127.0.0.1"
 cfg["AdvertiseServer"] = False
 cfg["Upnp"] = False

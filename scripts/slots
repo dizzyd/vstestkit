@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# What is running on this box, across every slot's checkout.
+#
+#   slots                 list live sessions
+#   slots reap            drop entries whose process is gone
+#   slots release <slot>  drop one by hand (after killing a game the hard way)
+#
+# The registry lives at $VSTK_STATE (~/.vstestkit), outside every tree, because
+# the question "is anyone else on the GPU right now" cannot be answered from
+# inside one checkout.
+#
+source "$(dirname "$0")/common.sh"
+source "$(dirname "$0")/registry.sh"
+
+case "${1:-list}" in
+  list)
+    lock_registry
+    reap_sessions
+    rows="$(for f in "$(sessions_dir)"/*.session; do
+        [ -e "$f" ] || continue
+        printf '%s\t%s\t%s\t%s\t%s\n' \
+            "$(session_field "$f" slot)" "$(session_field "$f" mode)" \
+            "$(session_field "$f" pid)"  "$(session_field "$f" started)" \
+            "$(session_field "$f" tree)"
+    done)"
+    unlock_registry
+
+    clients="$(printf '%s\n' "$rows" | awk -F'\t' '$2=="client"' | grep -c . || true)"
+    if [ -z "$rows" ]; then
+        echo "no live sessions"
+    else
+        { printf 'SLOT\tTIER\tPID\tSTARTED\tTREE\n'; printf '%s\n' "$rows"; } \
+            | column -t -s "$(printf '\t')"
+    fi
+    # A game started before the registry existed, or by hand, holds a port and a
+    # run directory while counting for nothing. Cheap to notice, and the fix is
+    # always the same, so say it rather than leaving a puzzle.
+    for d in "$VSTK_ROOT"/run/*/; do
+        [ -f "$d/server.pid" ] || continue
+        pid="$(cat "$d/server.pid")"
+        kill -0 "$pid" 2>/dev/null || continue
+        slot="$(basename "$d")"
+        [ "$slot" = "current" ] && slot="default"
+        printf '%s\n' "$rows" | cut -f1 | grep -qx "$slot" && continue
+        echo "note: an unregistered session is live in this tree (slot $slot, pid $pid)."
+        echo "      it predates the registry, so it holds a port but counts for nothing."
+        echo "      VSTK_SLOT=$slot bash scripts/stop.sh, then boot it again to register it."
+    done
+
+    echo
+    echo "clients $clients/$VSTK_MAX_CLIENTS   registry $VSTK_STATE   this tree slot=$VSTK_SLOT"
+    ;;
+
+  reap)
+    lock_registry; reap_sessions; unlock_registry
+    echo "reaped"
+    ;;
+
+  release)
+    [ -n "${2:-}" ] || die "usage: slots release <slot>"
+    # Assigned, not prefixed: whether a prefix survives a *function* call is one
+    # of the corners where bash and POSIX mode disagree.
+    VSTK_SLOT="$2"
+    release_slot
+    echo "released $VSTK_SLOT"
+    ;;
+
+  *) die "usage: slots [list|reap|release <slot>]" ;;
+esac

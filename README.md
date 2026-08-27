@@ -47,11 +47,58 @@ overrides it; `VSTK_GAME_VERSION=1.22.6` picks a specific install.
 | **Headless Linux** | The client tier's home. `docs/linux.md` covers setup and the traps. Push with `scripts/sync-linux.sh <user@host> [--mod DIR]`, then run over SSH. |
 | **macOS** | Server tier only, in practice. The client tier works but is not dependable: the display must be awake and unlocked, sleeps during long sessions, and the client has died silently mid-run. Build here, run there. |
 
+## Sharing a box
+
+One test box, several mods under test at once. A **slot** is one tenant of it, and
+everything a session owns is keyed by the slot: the checkout, the run directory,
+the game's TCP port, the virtual display, the entry in the box-wide registry.
+
+```bash
+bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../olla/olla   # -> ~/vstestkit-olla
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh ~/mods/olla/tests --mod ~/mods/olla/olla --client'
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/slots'   # what else is running
+```
+
+The slot name comes from the checkout directory — `vstestkit-olla` is slot `olla` —
+so an SSH command line that already says which tree it is in needs nothing more.
+`VSTK_SLOT`, or `--slot` on `run.sh` and `look.sh`, overrides. A plain `vstestkit`
+is slot `default` and keeps `run/current`, so a single-tenant box needs no
+migration.
+
+**Each slot gets its own checkout**, rather than sharing one. `sync-linux.sh`
+rsyncs `--delete`, so a shared tree means every push swaps the harness under
+whoever is mid-run — and the harness is under development too. It also refuses to
+push into a slot whose session is live; `--force` overrides.
+
+What the registry (`~/.vstestkit`, deliberately outside every checkout) buys:
+
+- **A slot is exclusive.** A second boot in a live slot is refused, instead of
+  `run.sh` reporting `reusing live session` and loading your suite into a game
+  that never loaded your mod.
+- **The client tier is capped**, `VSTK_MAX_CLIENTS=3` by default. Over the cap a
+  `--client` boot queues, printing who holds the slots, up to `VSTK_WAIT` seconds
+  (600; `0` fails immediately). Server-tier sessions are uncapped.
+- **Ports are reserved, not assumed.** A generated `serverconfig` hardcodes 42420
+  and singleplayer runs a real server on a real socket, so without this the second
+  session on a box dies in `startSockets` with a bare `Address already in use`.
+  Each session takes the first free port at or above `VSTK_GAME_PORT_BASE`. The
+  testkit's own endpoint already scanned for itself.
+
+Liveness is `kill -0` on the recorded pid, so a game killed with `-9` or lost to a
+reboot leaves nothing to tidy: the next claim reaps it. `scripts/slots reap` and
+`scripts/slots release <slot>` are there for when you want it now.
+
+Two virtual displays on one box would also collide: `xvfb` walks up from
+`VSTK_XDISPLAY` (99) to a number it can actually start on, and `wayland-headless`
+names its socket after the slot. A real X server (`existing`) is shared as-is — it
+hosts as many client windows as the GPU has memory for, and nothing in the harness
+depends on focus or on being unoccluded.
+
 ## Seeing what it drew
 
 ```bash
-VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh      # -> shots/<time>.png
-bash scripts/look.sh -o /tmp/now.png                     # local session
+VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh --slot olla   # -> shots/<time>.png
+bash scripts/look.sh -o /tmp/now.png                              # local session
 ```
 
 Captures the running client and, for a remote box, copies the image back. This is
@@ -356,12 +403,14 @@ scripts/
   look.sh             screenshot, locally or over SSH
   cairn-env.sh        resolve a Cairn-managed install
   display.sh          native / existing / xvfb / wayland-headless
+  registry.sh slots   box-wide slot registry: exclusion, client cap, ports
   sync-linux.sh       push repo and mods to a test box
   linux-doctor.sh     check a Linux box for what the client tier needs
   install-skill.sh    install the Claude Code skill
 templates/            clientsettings.json seed for an ephemeral data path
 docs/linux.md         headless Linux setup
-run/current/          ephemeral data path for the live session (gitignored)
+run/<slot>/           ephemeral data path for a live session (gitignored)
+~/.vstestkit/         the box-wide session registry, outside every checkout
 ```
 
 ## License

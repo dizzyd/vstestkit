@@ -88,6 +88,16 @@ bash scripts/sync-linux.sh dizzyd@vsclient.home     # from the workstation
 ssh dizzyd@vsclient.home 'cd vstestkit && bash scripts/run.sh tests/selftest --client'
 ```
 
+If more than one mod is under test on the box at a time, give each a **slot** —
+`sync-linux.sh --mod ../olla/olla` pushes to `~/vstestkit-olla` and everything run
+from that tree keys itself to slot `olla`. `scripts/slots` says what is live,
+`VSTK_MAX_CLIENTS` (3) caps concurrent client sessions, and each session reserves
+its own game port instead of assuming 42420. README's "Sharing a box" has the
+whole of it.
+
+The box's ceiling is memory and VRAM, not the harness: a client session is a full
+game process, and the verified box has 15 GB and a 6 GB card.
+
 Otherwise name a strategy:
 
 ```bash
@@ -116,7 +126,7 @@ VSTK_DISPLAY=wayland-headless VSTK_NVIDIA=1 bash scripts/boot.sh --client
 ## Seeing the screen from elsewhere
 
 ```bash
-VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh
+VSTK_HOST=dizzyd@vsclient.home bash scripts/look.sh --slot olla
 ```
 
 Captures on the box and copies the PNG back. Verified against this VM: a scene

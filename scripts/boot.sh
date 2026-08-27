@@ -6,6 +6,7 @@
 #   bash scripts/boot.sh --client        # singleplayer client: BOTH sides, one process
 #   VSTK_SEED=99 bash scripts/boot.sh    # a different world
 #   VSTK_KEEP=1 bash scripts/boot.sh     # reuse the existing run dir
+#   VSTK_SLOT=olla bash scripts/boot.sh  # a named slot on a shared box
 #
 # --client opens a real window on your desktop. There is no offscreen mode: the
 # client is GLFW/OpenGL and ClientProgramArgs has no headless option.
@@ -15,6 +16,7 @@
 #
 source "$(dirname "$0")/common.sh"
 source "$(dirname "$0")/display.sh"
+source "$(dirname "$0")/registry.sh"
 resolve_vintage_story
 
 MODE=server
@@ -32,6 +34,27 @@ if [ -f "$VSTK_RUN/server.pid" ] && kill -0 "$(cat "$VSTK_RUN/server.pid")" 2>/d
     die "a session is already running (pid $(cat "$VSTK_RUN/server.pid")) - stop it first with scripts/stop.sh"
 fi
 
+# Take the slot before touching anything, and give it back if the boot does not
+# finish - a slot held by a game that never started is the failure that turns a
+# shared box into a queue nobody can drain.
+VSTK_CLAIMED=0
+BOOTED=0
+on_exit() {
+    [ "$VSTK_CLAIMED" = "1" ] || return 0
+    [ "$BOOTED" = "1" ] && return 0
+    # A boot that gave up waiting may still have left a live game behind. The
+    # slot belongs to that process until stop.sh takes it down; releasing here
+    # would let the next boot rm -rf the run directory underneath it.
+    if [ -f "$VSTK_RUN/server.pid" ] && kill -0 "$(cat "$VSTK_RUN/server.pid")" 2>/dev/null; then
+        return 0
+    fi
+    release_slot
+}
+trap on_exit EXIT
+
+claim_slot "$MODE"
+reserve_game_port
+
 if [ "${VSTK_KEEP:-0}" != "1" ]; then
     rm -rf "$VSTK_RUN"
 fi
@@ -45,7 +68,8 @@ if [ ! -f "$DATA/serverconfig.json" ]; then
     $SERVER --dataPath "$DATA" --genconfig >/dev/null 2>&1 || die "genconfig failed"
 fi
 
-VSTK_MODE="$MODE" python3 "$VSTK_ROOT/scripts/writeconfig.py" "$DATA" "$SEED" "$PLAYSTYLE" \
+VSTK_MODE="$MODE" VSTK_GAME_PORT="$VSTK_GAME_PORT" \
+    python3 "$VSTK_ROOT/scripts/writeconfig.py" "$DATA" "$SEED" "$PLAYSTYLE" \
     || die "could not write serverconfig"
 
 if [ "$MODE" = "client" ]; then
@@ -61,8 +85,8 @@ fi
 
 rm -f "$DATA/.vstestkit"
 
-echo "booting  install=$VINTAGE_STORY  mode=$MODE"
-echo "         data=$DATA  seed=$SEED  playstyle=$PLAYSTYLE"
+echo "booting  install=$VINTAGE_STORY  mode=$MODE  slot=$VSTK_SLOT"
+echo "         data=$DATA  seed=$SEED  playstyle=$PLAYSTYLE  gameport=$VSTK_GAME_PORT"
 
 # addModPath and addOrigin are CommandLineParser sequence options: ONE flag
 # followed by every path. Repeating the flag is a duplicate-option parse error,
@@ -89,8 +113,8 @@ fi
 if [ "$MODE" = "client" ]; then
     CLIENT="$(vs_client_cmd)"
 
-    STRATEGY="$(start_display)"
-    echo "         display=$STRATEGY${DISPLAY:+ DISPLAY=$DISPLAY}${WAYLAND_DISPLAY:+ WAYLAND_DISPLAY=$WAYLAND_DISPLAY}"
+    start_display
+    echo "         display=$VSTK_DISPLAY_STRATEGY${DISPLAY:+ DISPLAY=$DISPLAY}${WAYLAND_DISPLAY:+ WAYLAND_DISPLAY=$WAYLAND_DISPLAY}"
 
     # Run the test client OFFLINE, so it never touches your real login.
     #
@@ -137,6 +161,7 @@ fi
 
 echo $! > "$VSTK_RUN/server.pid"
 PID="$(cat "$VSTK_RUN/server.pid")"
+adopt_slot_pid "$PID"
 
 # Hold the display awake for as long as the game lives, where the platform has
 # such a notion. Tied to the pid rather than wrapping the launch, so stop.sh
@@ -155,7 +180,8 @@ TIMEOUT="${VSTK_BOOT_TIMEOUT:-300}"
 for i in $(seq 1 "$TIMEOUT"); do
     if [ -f "$DATA/.vstestkit" ] && [[ ",$(handshake_sides)," == *",$WANT_SIDE,"* ]]; then
         read_handshake
-        echo "ready    pid=$PID port=$VSTK_PORT sides=$(handshake_sides)  (${i}s)"
+        BOOTED=1
+        echo "ready    pid=$PID port=$VSTK_PORT slot=$VSTK_SLOT sides=$(handshake_sides)  (${i}s)"
         echo
         echo "  bash scripts/vstk info"
         echo "  bash scripts/run.sh <tests.csproj>"

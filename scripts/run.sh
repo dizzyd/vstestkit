@@ -7,6 +7,7 @@
 #   bash scripts/run.sh path/to/mod.tests.csproj --filter Moisture
 #   bash scripts/run.sh <...> --client    run the client tier too
 #   bash scripts/run.sh <...> --keep      reuse/leave a session running
+#   bash scripts/run.sh <...> --slot N    run in a named slot on a shared box
 #   bash scripts/run.sh <...> --mod DIR   load a mod project (code + assets)
 #   bash scripts/run.sh <...> --mods DIR  a built Mods directory
 #   bash scripts/run.sh <...> --origin DIR  an extra assets directory
@@ -24,6 +25,7 @@ while [ $# -gt 0 ]; do
     --filter) FILTER="$2"; shift 2 ;;
     --keep)   KEEP=1; shift ;;
     --client) CLIENT_MODE=1; shift ;;
+    --slot)   set_slot "$2"; shift 2 ;;
     --mods)   EXTRA_MODS="${EXTRA_MODS:+$EXTRA_MODS:}$2"; shift 2 ;;
     --origin) EXTRA_ORIGINS="${EXTRA_ORIGINS:+$EXTRA_ORIGINS:}$2"; shift 2 ;;
     # Convenience for this workspace's layout: a mod project directory holds its
@@ -77,7 +79,7 @@ fi
 STARTED=0
 if [ -f "$(handshake_file)" ] && [ -f "$VSTK_RUN/server.pid" ] \
    && kill -0 "$(cat "$VSTK_RUN/server.pid")" 2>/dev/null; then
-    echo "reusing live session"
+    echo "reusing live session in slot $VSTK_SLOT"
 else
     [ -n "$EXTRA_MODS" ] && export VSTK_EXTRA_MODS="$EXTRA_MODS"
     [ -n "$EXTRA_ORIGINS" ] && export VSTK_EXTRA_ORIGINS="$EXTRA_ORIGINS"

@@ -12,6 +12,12 @@
 #
 # Pick with VSTK_DISPLAY; "auto" chooses native on macOS, existing if a display
 # is already set, else xvfb.
+#
+# Both virtual strategies are per-slot: xvfb walks up from VSTK_XDISPLAY (99) to
+# the first display number it can actually start on, and wayland-headless names
+# its socket after the slot. `existing` is shared by construction - a real X
+# server hosts as many client windows as the GPU has memory for, and nothing in
+# the harness depends on focus or on being unoccluded.
 
 VSTK_DISPLAY="${VSTK_DISPLAY:-auto}"
 
@@ -24,6 +30,12 @@ resolve_display_strategy() {
 
 # Starts whatever the strategy needs and exports the environment for the client.
 # Anything it launches gets its pid recorded so stop.sh can clean up.
+#
+# Reports through VSTK_DISPLAY_STRATEGY rather than stdout, and so must be called
+# directly: `$(start_display)` runs it in a subshell, where every export it makes
+# - DISPLAY above all - dies with that subshell. Only the `existing` strategy
+# survives that, because there the variables were already in the environment,
+# which is why it went unnoticed.
 start_display() {
     local strategy; strategy="$(resolve_display_strategy)"
     local w="${VSTK_SCREEN_WIDTH:-1280}" h="${VSTK_SCREEN_HEIGHT:-800}"
@@ -49,22 +61,37 @@ start_display() {
             command -v Xvfb >/dev/null 2>&1 \
                 || die "Xvfb not found. apt install xvfb mesa-utils libgl1-mesa-dri"
 
-            local num="${VSTK_XDISPLAY:-99}"
-            Xvfb ":$num" -screen 0 "${w}x${h}x24" +extension GLX +render -noreset \
-                > "$VSTK_RUN/display.out" 2>&1 &
-            echo $! > "$VSTK_RUN/display.pid"
+            # A fixed :99 is one slot's display, and on a box running several
+            # slots the second Xvfb simply loses. Walk upward until one starts
+            # and answers - claiming a number and launching cannot be made
+            # atomic across processes, so treat losing the race as a retry
+            # rather than as a boot failure.
+            local num="" n
+            for n in $(seq "${VSTK_XDISPLAY:-99}" $(( ${VSTK_XDISPLAY:-99} + 15 ))); do
+                [ -e "/tmp/.X$n-lock" ] && continue
+                Xvfb ":$n" -screen 0 "${w}x${h}x24" +extension GLX +render -noreset \
+                    > "$VSTK_RUN/display.out" 2>&1 &
+                local xpid=$!
+                local ok=0
+                for _ in $(seq 1 50); do
+                    kill -0 "$xpid" 2>/dev/null || break
+                    if xdpyinfo -display ":$n" >/dev/null 2>&1; then ok=1; break; fi
+                    sleep 0.1
+                done
+                if [ "$ok" = "1" ]; then
+                    echo "$xpid" > "$VSTK_RUN/display.pid"
+                    num="$n"
+                    break
+                fi
+                kill "$xpid" 2>/dev/null || true
+            done
+            [ -n "$num" ] || die "no free X display in ${VSTK_XDISPLAY:-99}..$(( ${VSTK_XDISPLAY:-99} + 15 )); see $VSTK_RUN/display.out"
 
             export DISPLAY=":$num"
             # Xvfb's own GLX is ancient; Mesa's llvmpipe is what actually supplies
             # the 4.3 context the client asks for.
             export LIBGL_ALWAYS_SOFTWARE=1
             export GALLIUM_DRIVER="${GALLIUM_DRIVER:-llvmpipe}"
-
-            # Give the server a moment to accept connections.
-            for _ in $(seq 1 50); do
-                xdpyinfo -display ":$num" >/dev/null 2>&1 && break
-                sleep 0.1
-            done
             ;;
 
         wayland-headless)
@@ -79,9 +106,21 @@ start_display() {
             local swayargs=""
             [ "${VSTK_NVIDIA:-0}" = "1" ] && swayargs="--unsupported-gpu"
 
+            # Name the socket after the slot. Left unset, wlroots takes the first
+            # free wayland-N for the compositor while the client, having no
+            # WAYLAND_DISPLAY either, defaults to wayland-0 - so on a box running
+            # two slots both clients land on whichever compositor started first.
+            export WAYLAND_DISPLAY="wayland-vstk-$VSTK_SLOT"
+
             sway $swayargs > "$VSTK_RUN/display.out" 2>&1 &
             echo $! > "$VSTK_RUN/display.pid"
-            sleep 2
+
+            for _ in $(seq 1 100); do
+                [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+                sleep 0.1
+            done
+            [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] \
+                || die "sway did not create $XDG_RUNTIME_DIR/$WAYLAND_DISPLAY; see $VSTK_RUN/display.out"
 
             # RuntimeEnv force-sets OPENTK_4_USE_WAYLAND=0 on a Wayland session
             # unless it is already set, which silently drops the client onto
@@ -94,7 +133,7 @@ start_display() {
             ;;
     esac
 
-    echo "$strategy"
+    VSTK_DISPLAY_STRATEGY="$strategy"
 }
 
 # Holds the display awake for the life of the game, where that is a thing.
