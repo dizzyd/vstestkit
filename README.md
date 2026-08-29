@@ -167,6 +167,28 @@ since its last update, so advancing the calendar would wet soil regardless of wh
 a test did. `VSTK_WEATHER=1`, or `World.SetPrecipitation(x)`, when rain is the
 subject.
 
+### When a test needs real terrain
+
+`vstestkit-standard` is the same creative world with `worldType: "standard"` — normal
+worldgen instead of superflat.
+
+```bash
+VSTK_PLAYSTYLE=vstestkit-standard bash scripts/run.sh <tests> --mod <dir> --slot <name> --client
+```
+
+A mod that reads worldgen state has no choice: `GenTerra` and every standard generator bail
+unless the savegame's `WorldType` is exactly `"standard"`, so on the flat preset
+`GenRockStrataNew.strata` and the `GenMaps` layers stay **null** and such a mod looks broken
+when it is fine. Cover the rest of it on flat and skip those tests there with a reason.
+
+Two things it needs:
+
+- **A separate `--slot`**, and its `data/Saves` wiped first. Playstyle is chosen at world
+  creation, so an existing world keeps whatever it was made with.
+- **`--client`, even for server-side tests.** `boot.sh` passes `--playStyle` only on the
+  client branch; a headless boot ignores `VSTK_PLAYSTYLE` and silently hands back the flat
+  world.
+
 **The world origin is the middle of the map, not 0,0.** The default map is
 1024000 wide, so the middle is around `512000, 2, 512000`, and a block written at
 `0,0,0` lands in an unloaded chunk and silently reads back as air. Inside a test

@@ -1,4 +1,6 @@
 {
   "playstyle-vstestkit-flat": "Testkit Flat",
-  "playstyle-desc-vstestkit-flat": "Superflat creative world with survival content loaded. For automated mod tests."
+  "playstyle-desc-vstestkit-flat": "Superflat creative world with survival content loaded. For automated mod tests.",
+  "playstyle-vstestkit-standard": "Testkit Standard",
+  "playstyle-desc-vstestkit-standard": "Creative world with normal terrain generation. For mod tests that need real worldgen."
 }

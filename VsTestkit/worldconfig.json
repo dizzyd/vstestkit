@@ -23,6 +23,30 @@
         "colorAccurateWorldmap": "true",
         "loreContent": "false"
       }
+    },
+    {
+      "code": "vstestkit-standard",
+      "playListCode": "creative",
+      "langCode": "vstestkit-standard",
+      "listOrder": 100,
+      "mods": [
+        "game",
+        "creative",
+        "survival"
+      ],
+      "worldType": "standard",
+      "worldConfig": {
+        "worldClimate": "realistic",
+        "gameMode": "creative",
+        "hoursPerDay": "24",
+        "cloudypos": "0.5",
+        "temporalStability": "false",
+        "temporalStorms": "off",
+        "temporalRifts": "off",
+        "snowAccum": "false",
+        "colorAccurateWorldmap": "true",
+        "loreContent": "false"
+      }
     }
   ],
   "worldConfigAttributes": []
