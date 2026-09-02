@@ -131,6 +131,20 @@ except Exception: print("")' "$(handshake_file)" 2>/dev/null
 
 handshake_file() { echo "$VSTK_RUN/data/.vstestkit"; }
 
+# In a two-process multiplayer session the client keeps the usual data directory -
+# so vstk, run.sh and stop.sh all keep talking to the client without changes - and
+# the headless server it connects to gets its own beside it.
+server_data_dir()      { echo "$VSTK_RUN/server-data"; }
+server_handshake_file() { echo "$(server_data_dir)/.vstestkit"; }
+
+read_server_handshake() {
+  local f; f="$(server_handshake_file)"
+  [ -f "$f" ] || die "no peer server session (missing $f)"
+  VSTK_PEER_PORT="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["port"])' "$f")"
+  VSTK_PEER_TOKEN="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["token"])' "$f")"
+  VSTK_PEER_PID="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["pid"])' "$f")"
+}
+
 read_handshake() {
   local f; f="$(handshake_file)"
   [ -f "$f" ] || die "no live session (missing $f) - run scripts/boot.sh first"

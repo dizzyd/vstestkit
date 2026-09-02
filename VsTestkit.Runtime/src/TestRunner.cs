@@ -86,6 +86,8 @@ namespace VsTestkit.Testing
 
                 var classSkip = type.GetCustomAttribute<SkipAttribute>();
                 var classClient = type.GetCustomAttribute<RequiresClientAttribute>() != null;
+                var classMp = type.GetCustomAttribute<RequiresMultiplayerAttribute>() != null;
+                var classSp = type.GetCustomAttribute<SingleplayerOnlyAttribute>() != null;
                 var classPlot = type.GetCustomAttribute<PlotSizeAttribute>();
 
                 foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
@@ -102,6 +104,8 @@ namespace VsTestkit.Testing
                         ClassName = type.FullName,
                         MethodName = m.Name,
                         RequiresClient = classClient || m.GetCustomAttribute<RequiresClientAttribute>() != null,
+                        RequiresMultiplayer = classMp || m.GetCustomAttribute<RequiresMultiplayerAttribute>() != null,
+                        SingleplayerOnly = classSp || m.GetCustomAttribute<SingleplayerOnlyAttribute>() != null,
                         SkipReason = skip?.Reason,
                         PlotSize = plot?.Size ?? 16,
                         PlotHeight = plot?.Height ?? 32,
@@ -154,6 +158,22 @@ namespace VsTestkit.Testing
                     continue;
                 }
 
+                if (tc.SingleplayerOnly && Remote.Available)
+                {
+                    var r = TestResult.For(tc, TestStatus.Skipped);
+                    r.message = "singleplayer only; this is a two-process session";
+                    summary.Tally(r);
+                    continue;
+                }
+
+                if (tc.RequiresMultiplayer && !Remote.Available)
+                {
+                    var r = TestResult.For(tc, TestStatus.Skipped);
+                    r.message = "needs a two-process session; boot with --multiplayer";
+                    summary.Tally(r);
+                    continue;
+                }
+
                 if (tc.RequiresClient && !clientAttached)
                 {
                     var r = TestResult.For(tc, TestStatus.Skipped);
@@ -188,7 +208,7 @@ namespace VsTestkit.Testing
 
             var tcs = new TaskCompletionSource<TestResult>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            Vs.ServerCtx.Post(_ =>
+            Vs.PrimaryCtx.Post(_ =>
             {
                 RunOneAsync(tc, plotIndex, result)
                     .ContinueWith(t => tcs.TrySetResult(result), TaskContinuationOptions.ExecuteSynchronously);
@@ -220,9 +240,14 @@ namespace VsTestkit.Testing
 
             try
             {
-                var plot = await Plots.Prepare(plotIndex, tc.PlotSize, tc.PlotHeight);
+                // Without a server side there is no world here to carve a plot out of - the
+                // world belongs to the peer process. Such a test works in client state and
+                // reaches the server through Remote, so it gets no plot rather than failing.
+                var plot = Vs.Sapi == null
+                    ? null
+                    : await Plots.Prepare(plotIndex, tc.PlotSize, tc.PlotHeight);
                 Vs.Plot = plot;
-                result.plot = plot.ToString();
+                result.plot = plot?.ToString() ?? "(none - no server side in this process)";
 
                 instance = Activator.CreateInstance(tc.DeclaringType);
 

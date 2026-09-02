@@ -19,6 +19,23 @@ namespace VsTestkit.Testing
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class RequiresClientAttribute : Attribute { }
 
+    /// <summary>
+    /// Needs a two-process session (boot.sh --multiplayer): a real server on the other end
+    /// of a socket, reachable with Remote. Skipped rather than failed in a singleplayer
+    /// session, where client and server share one process and the sync code takes an
+    /// entirely different branch.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+    public class RequiresMultiplayerAttribute : Attribute { }
+
+    /// <summary>
+    /// The opposite: only meaningful when both sides share this process. Anything that
+    /// calls OnServer(), or that assumes a player may edit server-authoritative state,
+    /// belongs here - it is skipped in a two-process session rather than failing there.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
+    public class SingleplayerOnlyAttribute : Attribute { }
+
     /// <summary>Temporarily disable a test, with a reason that shows in the report.</summary>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
     public class SkipAttribute : Attribute

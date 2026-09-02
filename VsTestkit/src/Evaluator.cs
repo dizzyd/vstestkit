@@ -168,12 +168,22 @@ public static class VstkSnippet
         }
 
         /// <summary>
-        /// Every loaded assembly with a real file location. This is what puts the
-        /// mod under test in scope without anyone configuring anything.
+        /// Every loaded assembly with a real file location, plus the rest of the shared
+        /// framework. The loaded set is what puts the mod under test in scope without
+        /// anyone configuring anything; the framework sweep covers assemblies the game
+        /// happens not to have touched yet.
+        ///
+        /// Without the sweep a test can only use framework types something already loaded -
+        /// so, for instance, a settings class could not be annotated with
+        /// System.ComponentModel.DataAnnotations attributes, because nothing had needed
+        /// System.ComponentModel.Annotations.dll at the moment the test was compiled. That
+        /// fails as "'Range' is not an attribute class", which points nowhere near the
+        /// actual cause.
         /// </summary>
         internal static IEnumerable<MetadataReference> References()
         {
-            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var refs = new List<MetadataReference>();
 
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -187,13 +197,54 @@ public static class VstkSnippet
                 catch { continue; }
 
                 if (string.IsNullOrEmpty(location)) continue;
-                if (!seen.Add(location)) continue;
+                if (!seenFiles.Add(location)) continue;
 
-                try { refs.Add(MetadataReference.CreateFromFile(location)); }
+                try
+                {
+                    refs.Add(MetadataReference.CreateFromFile(location));
+                    seenNames.Add(Path.GetFileNameWithoutExtension(location));
+                }
+                catch { }
+            }
+
+            foreach (var file in FrameworkAssemblies())
+            {
+                // A loaded assembly always wins: it is the one the game is actually running,
+                // and adding a second copy of the same simple name makes every type in it
+                // ambiguous.
+                if (!seenNames.Add(Path.GetFileNameWithoutExtension(file))) continue;
+                if (!seenFiles.Add(file)) continue;
+
+                try { refs.Add(MetadataReference.CreateFromFile(file)); }
                 catch { }
             }
 
             return refs;
+        }
+
+        /// <summary>
+        /// The shared framework directory - where System.Private.CoreLib lives, which is
+        /// the runtime the game is executing on rather than whatever SDK may be installed.
+        /// </summary>
+        private static IEnumerable<string> FrameworkAssemblies()
+        {
+            string dir;
+            try
+            {
+                dir = Path.GetDirectoryName(typeof(object).Assembly.Location);
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return Array.Empty<string>();
+            }
+            catch { return Array.Empty<string>(); }
+
+            try
+            {
+                // Native and resource assemblies have no metadata to reference.
+                return Directory.EnumerateFiles(dir, "*.dll")
+                    .Where(f => !Path.GetFileName(f).StartsWith("api-ms-", StringComparison.OrdinalIgnoreCase))
+                    .Where(f => !Path.GetFileName(f).Equals("mscordaccore.dll", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+            }
+            catch { return Array.Empty<string>(); }
         }
 
         static string Hash(string s)

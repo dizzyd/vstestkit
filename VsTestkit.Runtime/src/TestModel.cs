@@ -14,6 +14,8 @@ namespace VsTestkit.Testing
         public string FullName => ClassName + "." + MethodName;
 
         public bool RequiresClient;
+        public bool RequiresMultiplayer;
+        public bool SingleplayerOnly;
         public string SkipReason;
         public int PlotSize = 16;
         public int PlotHeight = 32;

@@ -27,6 +27,14 @@ namespace VsTestkit.Testing
         public static GameThreadContext ServerCtx { get; private set; }
         public static GameThreadContext ClientCtx { get; private set; }
 
+        /// <summary>
+        /// The thread a test body starts on: the server where there is one, otherwise the
+        /// client. In a two-process multiplayer session the client's process has no server
+        /// side at all - the world lives in the peer - so tests there run on the client and
+        /// reach the server through <see cref="Remote"/>.
+        /// </summary>
+        public static GameThreadContext PrimaryCtx => ServerCtx ?? ClientCtx;
+
         /// <summary>The plot allocated to the running test.</summary>
         public static TestPlot Plot { get; internal set; }
 

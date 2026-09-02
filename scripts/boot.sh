@@ -4,6 +4,7 @@
 #
 #   bash scripts/boot.sh                 # headless server
 #   bash scripts/boot.sh --client        # singleplayer client: BOTH sides, one process
+#   bash scripts/boot.sh --multiplayer   # TWO processes: headless server + client joined to it
 #   VSTK_SEED=99 bash scripts/boot.sh    # a different world
 #   VSTK_KEEP=1 bash scripts/boot.sh     # reuse the existing run dir
 #   VSTK_SLOT=olla bash scripts/boot.sh  # a named slot on a shared box
@@ -20,7 +21,13 @@ source "$(dirname "$0")/registry.sh"
 resolve_vintage_story
 
 MODE=server
-[ "${1:-}" = "--client" ] && MODE=client
+MULTIPLAYER=0
+case "${1:-}" in
+    --client)      MODE=client ;;
+    # A multiplayer session is still one GPU tenant - only the client renders - so it
+    # claims a client slot and runs its headless server behind that.
+    --multiplayer) MODE=client; MULTIPLAYER=1 ;;
+esac
 
 SEED="${VSTK_SEED:-424242}"
 PLAYSTYLE="${VSTK_PLAYSTYLE:-vstestkit-flat}"
@@ -110,6 +117,49 @@ if [ -n "${VSTK_EXTRA_ORIGINS:-}" ]; then
     echo "         origins=$VSTK_EXTRA_ORIGINS"
 fi
 
+if [ "$MULTIPLAYER" = "1" ]; then
+    SERVER_DATA="$(server_data_dir)"
+    mkdir -p "$SERVER_DATA"
+
+    if [ ! -f "$SERVER_DATA/serverconfig.json" ]; then
+        $SERVER --dataPath "$SERVER_DATA" --genconfig >/dev/null 2>&1 || die "genconfig failed for the peer server"
+    fi
+
+    # The peer is a real server: it owns the world and the game port, and the client
+    # joins it over a socket. VerifyPlayerAuth is already false in writeconfig.py, so
+    # the offline client is accepted.
+    VSTK_MODE=server VSTK_GAME_PORT="$VSTK_GAME_PORT" \
+        python3 "$VSTK_ROOT/scripts/writeconfig.py" "$SERVER_DATA" "$SEED" "$PLAYSTYLE" \
+        || die "could not write peer serverconfig"
+
+    rm -f "$SERVER_DATA/.vstestkit"
+    echo "         peer server data=$SERVER_DATA"
+
+    VSTESTKIT=1 nohup $SERVER \
+        --dataPath "$SERVER_DATA" \
+        --addModPath "${MODPATHS[@]}" \
+        ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
+        > "$VSTK_RUN/peer-server.out" 2>&1 &
+
+    echo $! > "$VSTK_RUN/peer-server.pid"
+    adopt_slot_pid "$(cat "$VSTK_RUN/peer-server.pid")"
+
+    for i in $(seq 1 "${VSTK_BOOT_TIMEOUT:-180}"); do
+        if [ -f "$SERVER_DATA/.vstestkit" ]; then
+            read_server_handshake
+            echo "         peer server ready pid=$VSTK_PEER_PID rpc=$VSTK_PEER_PORT game=$VSTK_GAME_PORT  (${i}s)"
+            break
+        fi
+        kill -0 "$(cat "$VSTK_RUN/peer-server.pid")" 2>/dev/null \
+            || die "peer server died during boot; see $VSTK_RUN/peer-server.out"
+        sleep 1
+    done
+
+    [ -n "${VSTK_PEER_PORT:-}" ] || die "peer server never wrote a handshake; see $VSTK_RUN/peer-server.out"
+
+    export VSTK_PEER_PORT VSTK_PEER_TOKEN
+fi
+
 if [ "$MODE" = "client" ]; then
     CLIENT="$(vs_client_cmd)"
 
@@ -144,10 +194,16 @@ if [ "$MODE" = "client" ]; then
         echo "         network=offline (auth untouched; VSTK_ONLINE=1 to allow)"
     fi
 
+    WORLD_ARGS=(--openWorld vstestkit --playStyle "$PLAYSTYLE")
+    if [ "$MULTIPLAYER" = "1" ]; then
+        # -c/--connect replaces opening a local world; the world lives in the peer.
+        WORLD_ARGS=(--connect "127.0.0.1:$VSTK_GAME_PORT")
+        echo "         connecting to 127.0.0.1:$VSTK_GAME_PORT"
+    fi
+
     VSTESTKIT=1 nohup $CLIENT \
         --dataPath "$DATA" \
-        --openWorld vstestkit \
-        --playStyle "$PLAYSTYLE" \
+        "${WORLD_ARGS[@]}" \
         --addModPath "${MODPATHS[@]}" \
         ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
         > "$VSTK_RUN/server.out" 2>&1 &

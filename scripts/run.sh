@@ -8,6 +8,7 @@
 #   bash scripts/run.sh <...> --client    run the client tier too
 #   bash scripts/run.sh <...> --keep      reuse/leave a session running
 #   bash scripts/run.sh <...> --slot N    run in a named slot on a shared box
+#   bash scripts/run.sh <...> --multiplayer  server and client as two processes
 #   bash scripts/run.sh <...> --mod DIR   load a mod project (code + assets)
 #   bash scripts/run.sh <...> --mods DIR  a built Mods directory
 #   bash scripts/run.sh <...> --origin DIR  an extra assets directory
@@ -17,7 +18,7 @@
 source "$(dirname "$0")/common.sh"
 resolve_vintage_story
 
-TARGET=""; FILTER=""; KEEP=0; EXTRA_MODS=""; EXTRA_ORIGINS=""; CLIENT_MODE=0
+TARGET=""; FILTER=""; KEEP=0; EXTRA_MODS=""; EXTRA_ORIGINS=""; CLIENT_MODE=0; MULTIPLAYER=0
 CONFIG="${VSTK_CONFIG:-Debug}"
 
 while [ $# -gt 0 ]; do
@@ -25,6 +26,9 @@ while [ $# -gt 0 ]; do
     --filter) FILTER="$2"; shift 2 ;;
     --keep)   KEEP=1; shift ;;
     --client) CLIENT_MODE=1; shift ;;
+    # Two processes: a headless server and a client joined to it over a socket. The
+    # suite runs in the client, and Remote.Eval reaches the server.
+    --multiplayer) CLIENT_MODE=1; MULTIPLAYER=1; shift ;;
     --slot)   set_slot "$2"; shift 2 ;;
     --mods)   EXTRA_MODS="${EXTRA_MODS:+$EXTRA_MODS:}$2"; shift 2 ;;
     --origin) EXTRA_ORIGINS="${EXTRA_ORIGINS:+$EXTRA_ORIGINS:}$2"; shift 2 ;;
@@ -84,7 +88,11 @@ else
     [ -n "$EXTRA_MODS" ] && export VSTK_EXTRA_MODS="$EXTRA_MODS"
     [ -n "$EXTRA_ORIGINS" ] && export VSTK_EXTRA_ORIGINS="$EXTRA_ORIGINS"
     BOOT_ARGS=()
-    [ "$CLIENT_MODE" = "1" ] && BOOT_ARGS+=(--client)
+    if [ "$MULTIPLAYER" = "1" ]; then
+        BOOT_ARGS+=(--multiplayer)
+    elif [ "$CLIENT_MODE" = "1" ]; then
+        BOOT_ARGS+=(--client)
+    fi
     bash "$VSTK_ROOT/scripts/boot.sh" ${BOOT_ARGS[@]+"${BOOT_ARGS[@]}"} >/dev/null || die "boot failed"
     STARTED=1
 fi

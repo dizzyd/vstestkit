@@ -75,8 +75,11 @@ namespace VsTestkit
             if (TestRunner.Loaded.Count == 0)
                 throw new VerbException("no tests loaded - call tests.load first", "no_tests");
 
-            if (Hub.Sapi == null)
-                throw new VerbException("server side is not attached", "no_server");
+            // A two-process multiplayer session runs the suite in the client, whose process
+            // has no server side at all - the server is over a socket, reached with Remote.
+            // Requiring Sapi here would make that mode impossible.
+            if (Hub.Sapi == null && Hub.Capi == null)
+                throw new VerbException("no game side is attached", "no_side");
 
             var filter = a.TryGetValue("filter", out var f) ? Convert.ToString(f) : null;
             var summary = TestRunner.Run(filter, Hub.Capi != null);
