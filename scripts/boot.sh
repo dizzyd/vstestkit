@@ -135,9 +135,17 @@ if [ "$MULTIPLAYER" = "1" ]; then
     rm -f "$SERVER_DATA/.vstestkit"
     echo "         peer server data=$SERVER_DATA"
 
+    # Mods only the peer server gets. The client is launched without them, which is how
+    # you reproduce a server running a mod its players do not have.
+    SERVER_MODPATHS=("${MODPATHS[@]}")
+    if [ -n "${VSTK_SERVER_MODS:-}" ]; then
+        while IFS= read -r d; do [ -n "$d" ] && SERVER_MODPATHS+=("$d"); done <<< "${VSTK_SERVER_MODS//:/$'\n'}"
+        echo "         server-only mods=$VSTK_SERVER_MODS"
+    fi
+
     VSTESTKIT=1 nohup $SERVER \
         --dataPath "$SERVER_DATA" \
-        --addModPath "${MODPATHS[@]}" \
+        --addModPath "${SERVER_MODPATHS[@]}" \
         ${ORIGIN_ARGS[@]+"${ORIGIN_ARGS[@]}"} \
         > "$VSTK_RUN/peer-server.out" 2>&1 &
 
