@@ -179,7 +179,9 @@ VSTK_PLAYSTYLE=vstestkit-standard bash scripts/run.sh <tests> --mod <dir> --slot
 A mod that reads worldgen state has no choice: `GenTerra` and every standard generator bail
 unless the savegame's `WorldType` is exactly `"standard"`, so on the flat preset
 `GenRockStrataNew.strata` and the `GenMaps` layers stay **null** and such a mod looks broken
-when it is fine. Cover the rest of it on flat and skip those tests there with a reason.
+when it is fine. Cover the rest of it on flat and skip those tests there with a reason -
+`Skip("…")` from inside the test, since the ground is only two blocks deep there and
+`P(0, 0, 0).Y` is how a test finds that out.
 
 Two things it needs:
 
@@ -281,6 +283,7 @@ of letting it pass by luck. `await Until(cond, maxTicks)` beats guessing a count
 | `Assert.` | `Equal`, `True`, `Greater`, `Less`, `Close`, `InRange`, `Contains`, `NotNull`, `IsType<T>`, `Throws`, `ThrowsAsync`, `Fail` |
 | `Log("…")` | a line in this test's report entry |
 | `OnServer()`, `OnClient()` | switch game threads |
+| `Skip("why")` | skip from inside the test, for what an attribute cannot know - a world too flat to dig in, say |
 
 Attributes: `[VsTest(TimeoutMs = …)]`, `[RequiresClient]` (skipped, not failed, on
 a headless run), `[Skip("why")]`, `[PlotSize(n, height)]`, `[BeforeEach]`,

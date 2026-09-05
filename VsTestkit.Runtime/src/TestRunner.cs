@@ -259,12 +259,22 @@ namespace VsTestkit.Testing
                 result.status = TestStatus.Failed.ToString().ToLowerInvariant();
                 result.message = e.Message;
             }
+            catch (SkipException e)
+            {
+                result.status = TestStatus.Skipped.ToString().ToLowerInvariant();
+                result.message = e.Message;
+            }
             catch (Exception e)
             {
                 var inner = Unwrap(e);
                 if (inner is AssertionException)
                 {
                     result.status = TestStatus.Failed.ToString().ToLowerInvariant();
+                    result.message = inner.Message;
+                }
+                else if (inner is SkipException)
+                {
+                    result.status = TestStatus.Skipped.ToString().ToLowerInvariant();
                     result.message = inner.Message;
                 }
                 else

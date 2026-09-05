@@ -13,6 +13,15 @@ namespace VsTestkit.Testing
     }
 
     /// <summary>
+    /// Thrown by <see cref="Vs.Skip"/>: the test found, once running, that this world
+    /// cannot host it. Tallied as skipped, never as a failure.
+    /// </summary>
+    public class SkipException : Exception
+    {
+        public SkipException(string reason) : base(reason) { }
+    }
+
+    /// <summary>
     /// Assertions phrased so a failure message says what was expected and what was
     /// actually there. A bare "assertion failed" costs a whole debugging round trip.
     /// </summary>

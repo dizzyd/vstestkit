@@ -213,6 +213,13 @@ namespace VsTestkit.Testing
 
         /// <summary>Write a line into the test's captured output.</summary>
         public static void Log(string message) => TestOutput.Write(message);
+
+        /// <summary>
+        /// Skip from inside the test, for what an attribute cannot know - the flat
+        /// world has two blocks of ground under it, and a test that digs needs the
+        /// standard playstyle. The reason is what the report shows.
+        /// </summary>
+        public static void Skip(string reason) => throw new SkipException(reason);
     }
 
     /// <summary>Awaitable that moves execution to another game thread.</summary>
