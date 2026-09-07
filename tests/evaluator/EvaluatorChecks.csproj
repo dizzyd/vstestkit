@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../VsTestkit/src/Evaluator.cs;../../VsTestkit/src/Dispatch.cs;../../VsTestkit/src/Json.cs" />
+    <Reference Include="VintagestoryAPI"><HintPath>$(VINTAGE_STORY)/VintagestoryAPI.dll</HintPath></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(VINTAGE_STORY)/Lib/Newtonsoft.Json.dll</HintPath></Reference>
+    <Reference Include="Microsoft.CodeAnalysis"><HintPath>$(VINTAGE_STORY)/Lib/Microsoft.CodeAnalysis.dll</HintPath></Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp"><HintPath>$(VINTAGE_STORY)/Lib/Microsoft.CodeAnalysis.CSharp.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>

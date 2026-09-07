@@ -54,11 +54,14 @@ namespace VsTestkit
             var compileMs = sw.ElapsedMilliseconds;
 
             sw.Restart();
-            var value = Dispatch.OnSide<object>(side, () =>
+            var evaluated = Dispatch.OnSide(side, () =>
             {
                 try
                 {
-                    return method.Invoke(null, new object[] { Hub.Sapi, Hub.Capi });
+                    var value = method.Invoke(null, new object[] { Hub.Sapi, Hub.Capi });
+                    // Getters and deferred enumerables still touch game state.
+                    // Only the materialized value may leave this thread.
+                    return (Value: Json.Simplify(value), Type: value?.GetType().FullName);
                 }
                 catch (TargetInvocationException tie) when (tie.InnerException != null)
                 {
@@ -71,8 +74,8 @@ namespace VsTestkit
 
             return new
             {
-                value = Json.Simplify(value),
-                type = value?.GetType().FullName,
+                value = evaluated.Value,
+                type = evaluated.Type,
                 side = side ?? "server",
                 compileMs,
                 runMs,
