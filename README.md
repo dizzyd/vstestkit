@@ -233,6 +233,9 @@ public class Irrigation
 An accompanying `.csproj` is optional and exists only so an editor can type-check
 against the mod and the game; nothing builds it to run the suite.
 
+`bash tests/runner/run.sh` exercises runner failure paths without a game process,
+using a controlled game-thread queue and separately loaded fixture assembly.
+
 ### The one rule
 
 **Test bodies run on a game main thread and stay there.** That is what makes it
@@ -299,6 +302,10 @@ runs, 48 blocks from its neighbours, with the player placed in it when a client 
 attached. Tests share one world — regenerating per test would dominate the run —
 so isolation is spatial. Tests run **serially**, on purpose: a parallel run would
 trade a few seconds for failures that depend on interleaving.
+
+Concurrent runs and reloads are rejected. A timed-out test still owns the session
+until its body and teardown finish; a timeout cannot stop C# already running on a
+game thread. Restart the session if that work cannot complete.
 
 Plot setup loads a **one-chunk margin** around the plot. `IsFullyLoadedChunk` is
 `ServerChunk.NotAtEdge`, which wants all eight surrounding chunk columns; vanilla

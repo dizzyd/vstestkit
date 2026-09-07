@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.Loader;
+using System.Threading;
 using System.Threading.Tasks;
 using Vintagestory.API.Common;
 using Vintagestory.API.MathTools;
@@ -26,8 +27,9 @@ namespace VsTestkit.Testing
         public const string GroundBlock = "game:soil-medium-normal";
 
         static TestLoadContext loadContext;
-        static readonly List<TestCase> loaded = new List<TestCase>();
+        static IReadOnlyList<TestCase> loaded = Array.Empty<TestCase>();
         static string loadedPath;
+        static readonly SemaphoreSlim operation = new SemaphoreSlim(1, 1);
 
         public static IReadOnlyList<TestCase> Loaded => loaded;
         public static string LoadedPath => loadedPath;
@@ -37,7 +39,7 @@ namespace VsTestkit.Testing
         /// travel with the tests that assert on them rather than with the machine
         /// that happened to record them.
         /// </summary>
-        public static string SuiteDir { get; set; }
+        public static string SuiteDir { get; private set; }
 
         // ---------- loading ----------
 
@@ -53,7 +55,8 @@ namespace VsTestkit.Testing
             if (!File.Exists(path))
                 throw new FileNotFoundException($"no test assembly at {path}", path);
 
-            return LoadImage(File.ReadAllBytes(path), Path.GetFullPath(path));
+            var fullPath = Path.GetFullPath(path);
+            return LoadImage(File.ReadAllBytes(fullPath), fullPath, Path.GetDirectoryName(fullPath));
         }
 
         /// <summary>
@@ -63,63 +66,75 @@ namespace VsTestkit.Testing
         /// loaded one without the file being held, and so a suite compiled from
         /// source in-process - which never touches disk - loads the same way.
         /// </summary>
-        public static IReadOnlyList<TestCase> LoadImage(byte[] image, string label)
+        public static IReadOnlyList<TestCase> LoadImage(byte[] image, string label, string suiteDir)
         {
-            loadContext?.Unload();
-            loadContext = new TestLoadContext();
+            EnterOperation();
+            try { return LoadSuite(image, label, suiteDir); }
+            finally { operation.Release(); }
+        }
 
-            Assembly asm;
-            using (var ms = new MemoryStream(image))
+        static IReadOnlyList<TestCase> LoadSuite(byte[] image, string label, string suiteDir)
+        {
+            var nextContext = new TestLoadContext();
+            try
             {
-                asm = loadContext.LoadFromStream(ms);
-            }
-
-            loaded.Clear();
-            loadedPath = label;
-
-            foreach (var type in SafeTypes(asm))
-            {
-                var before = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                                 .FirstOrDefault(m => m.GetCustomAttribute<BeforeEachAttribute>() != null);
-                var after = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                                .FirstOrDefault(m => m.GetCustomAttribute<AfterEachAttribute>() != null);
-
-                var classSkip = type.GetCustomAttribute<SkipAttribute>();
-                var classClient = type.GetCustomAttribute<RequiresClientAttribute>() != null;
-                var classMp = type.GetCustomAttribute<RequiresMultiplayerAttribute>() != null;
-                var classSp = type.GetCustomAttribute<SingleplayerOnlyAttribute>() != null;
-                var classPlot = type.GetCustomAttribute<PlotSizeAttribute>();
-
-                foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                using var ms = new MemoryStream(image);
+                var asm = nextContext.LoadFromStream(ms);
+                var cases = new List<TestCase>();
+                foreach (var type in SafeTypes(asm))
                 {
-                    var attr = m.GetCustomAttribute<VsTestAttribute>();
-                    if (attr == null) continue;
+                    var before = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                                     .FirstOrDefault(m => m.GetCustomAttribute<BeforeEachAttribute>() != null);
+                    var after = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                                    .FirstOrDefault(m => m.GetCustomAttribute<AfterEachAttribute>() != null);
 
-                    var skip = m.GetCustomAttribute<SkipAttribute>() ?? classSkip;
-                    var plot = m.GetCustomAttribute<PlotSizeAttribute>() ?? classPlot;
+                    var classSkip = type.GetCustomAttribute<SkipAttribute>();
+                    var classClient = type.GetCustomAttribute<RequiresClientAttribute>() != null;
+                    var classMp = type.GetCustomAttribute<RequiresMultiplayerAttribute>() != null;
+                    var classSp = type.GetCustomAttribute<SingleplayerOnlyAttribute>() != null;
+                    var classPlot = type.GetCustomAttribute<PlotSizeAttribute>();
 
-                    loaded.Add(new TestCase
+                    foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
                     {
-                        Assembly = Path.GetFileName(label),
-                        ClassName = type.FullName,
-                        MethodName = m.Name,
-                        RequiresClient = classClient || m.GetCustomAttribute<RequiresClientAttribute>() != null,
-                        RequiresMultiplayer = classMp || m.GetCustomAttribute<RequiresMultiplayerAttribute>() != null,
-                        SingleplayerOnly = classSp || m.GetCustomAttribute<SingleplayerOnlyAttribute>() != null,
-                        SkipReason = skip?.Reason,
-                        PlotSize = plot?.Size ?? 16,
-                        PlotHeight = plot?.Height ?? 32,
-                        TimeoutMs = attr.TimeoutMs,
-                        Method = m,
-                        BeforeEach = before,
-                        AfterEach = after,
-                        DeclaringType = type
-                    });
-                }
-            }
+                        var attr = m.GetCustomAttribute<VsTestAttribute>();
+                        if (attr == null) continue;
 
-            loaded.Sort((a, b) => string.CompareOrdinal(a.FullName, b.FullName));
-            return loaded;
+                        var skip = m.GetCustomAttribute<SkipAttribute>() ?? classSkip;
+                        var plot = m.GetCustomAttribute<PlotSizeAttribute>() ?? classPlot;
+
+                        cases.Add(new TestCase
+                        {
+                            Assembly = Path.GetFileName(label),
+                            ClassName = type.FullName,
+                            MethodName = m.Name,
+                            RequiresClient = classClient || m.GetCustomAttribute<RequiresClientAttribute>() != null,
+                            RequiresMultiplayer = classMp || m.GetCustomAttribute<RequiresMultiplayerAttribute>() != null,
+                            SingleplayerOnly = classSp || m.GetCustomAttribute<SingleplayerOnlyAttribute>() != null,
+                            SkipReason = skip?.Reason,
+                            PlotSize = plot?.Size ?? 16,
+                            PlotHeight = plot?.Height ?? 32,
+                            TimeoutMs = attr.TimeoutMs,
+                            Method = m,
+                            BeforeEach = before,
+                            AfterEach = after,
+                            DeclaringType = type
+                        });
+                    }
+                }
+
+                cases.Sort((a, b) => string.CompareOrdinal(a.FullName, b.FullName));
+                loadContext?.Unload();
+                loadContext = nextContext;
+                loadedPath = label;
+                SuiteDir = suiteDir;
+                loaded = cases.AsReadOnly();
+                return loaded;
+            }
+            catch
+            {
+                nextContext.Unload();
+                throw;
+            }
         }
 
         static IEnumerable<Type> SafeTypes(Assembly asm)
@@ -135,7 +150,29 @@ namespace VsTestkit.Testing
 
         // ---------- running ----------
 
+        static void EnterOperation()
+        {
+            if (!operation.Wait(0))
+                throw new InvalidOperationException(
+                    "the suite is busy loading or running; a timed-out test must finish before another operation");
+        }
+
         public static RunSummary Run(string filter, bool clientAttached)
+        {
+            EnterOperation();
+            Task pending = Task.CompletedTask;
+            try { return RunSelected(filter, clientAttached, ref pending); }
+            finally
+            {
+                // An RPC timeout cannot stop C# already running on the game thread.
+                // Keep the lease until its body and teardown actually finish.
+                if (pending.IsCompleted) operation.Release();
+                else _ = pending.ContinueWith(_ => operation.Release(),
+                    CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            }
+        }
+
+        static RunSummary RunSelected(string filter, bool clientAttached, ref Task pending)
         {
             var summary = new RunSummary();
             var sw = Stopwatch.StartNew();
@@ -182,7 +219,7 @@ namespace VsTestkit.Testing
                     continue;
                 }
 
-                summary.Tally(RunOne(tc, Plots.SlotFor(tc.FullName), summary));
+                summary.Tally(RunOne(tc, Plots.SlotFor(tc.FullName), summary, ref pending));
             }
 
             summary.durationMs = sw.ElapsedMilliseconds;
@@ -201,7 +238,7 @@ namespace VsTestkit.Testing
         /// test wedges the game loop, a timeout scheduled on that same loop would
         /// never fire either.
         /// </summary>
-        static TestResult RunOne(TestCase tc, int plotIndex, RunSummary summary)
+        static TestResult RunOne(TestCase tc, int plotIndex, RunSummary summary, ref Task pending)
         {
             var result = TestResult.For(tc, TestStatus.Passed);
             var sw = Stopwatch.StartNew();
@@ -213,20 +250,23 @@ namespace VsTestkit.Testing
                 RunOneAsync(tc, plotIndex, result)
                     .ContinueWith(t => tcs.TrySetResult(result), TaskContinuationOptions.ExecuteSynchronously);
             }, null);
+            pending = tcs.Task;
 
             // Budget beyond the test's own timeout to cover plot setup and teardown.
             var budget = tc.TimeoutMs + 30000;
             if (!((IAsyncResult)tcs.Task).AsyncWaitHandle.WaitOne(budget))
             {
-                result.status = TestStatus.TimedOut.ToString().ToLowerInvariant();
-                result.message =
+                // The unfinished body still owns result; never return that mutable
+                // object to a caller that may already be serializing its report.
+                var timeout = TestResult.For(tc, TestStatus.TimedOut);
+                timeout.message =
                     $"did not finish within {budget}ms. The game thread may be blocked; " +
                     "remaining tests were not run because the world state is now unknown.";
-                result.durationMs = sw.ElapsedMilliseconds;
+                timeout.durationMs = sw.ElapsedMilliseconds;
 
                 summary.aborted = true;
                 summary.abortReason = $"{tc.FullName} timed out";
-                return result;
+                return timeout;
             }
 
             result.durationMs = sw.ElapsedMilliseconds;

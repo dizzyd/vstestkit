@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs;Adapters.cs" />
+    <Compile Include="../../VsTestkit.Runtime/src/TestRunner.cs;../../VsTestkit.Runtime/src/TestModel.cs;../../VsTestkit.Runtime/src/Attributes.cs;../../VsTestkit.Runtime/src/Assert.cs" />
+  </ItemGroup>
+</Project>
