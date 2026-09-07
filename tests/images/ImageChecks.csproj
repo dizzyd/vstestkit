@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><ImplicitUsings>enable</ImplicitUsings></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../VsTestkit.Runtime/VsTestkit.Runtime.csproj" />
+    <Reference Include="SkiaSharp"><HintPath>$(VINTAGE_STORY)/Lib/SkiaSharp.dll</HintPath></Reference>
+    <None Include="$(VINTAGE_STORY)/Lib/libSkiaSharp.*" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

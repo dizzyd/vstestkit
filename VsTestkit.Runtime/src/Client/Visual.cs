@@ -371,9 +371,18 @@ namespace VsTestkit.Testing
             if (region == null) return new VisualRegion(0, 0, width, height);
 
             var r = region.Value;
-            var x = Math.Max(0, Math.Min(r.X, width - 1));
-            var y = Math.Max(0, Math.Min(r.Y, height - 1));
-            return new VisualRegion(x, y, Math.Min(r.Width, width - x), Math.Min(r.Height, height - y));
+            if (r.Width <= 0 || r.Height <= 0)
+                throw new AssertionException($"visual region must have positive dimensions: {r}");
+
+            // Intersect, rather than moving an off-screen rectangle onto the
+            // image. Widen before adding so extreme coordinates cannot wrap.
+            var left = Math.Max(0L, r.X);
+            var top = Math.Max(0L, r.Y);
+            var right = Math.Min((long)width, (long)r.X + r.Width);
+            var bottom = Math.Min((long)height, (long)r.Y + r.Height);
+            if (right <= left || bottom <= top)
+                throw new AssertionException($"visual region {r} does not intersect the {width}x{height} image");
+            return new VisualRegion((int)left, (int)top, (int)(right - left), (int)(bottom - top));
         }
 
         // ---------- paths ----------

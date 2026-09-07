@@ -373,6 +373,8 @@ from the Linux box.
 Only the middle half of the frame is compared by default. Sky and drifting cloud
 shadows are worth tens of percent of an unchanged frame; pass a `VisualRegion`,
 or `wholeFrame: true` when that is really what you mean.
+A region is clipped to the image, not moved onto it. Nonpositive dimensions or
+an empty intersection fail rather than reporting a match without comparing pixels.
 
 **Pin absolute time.** Not the time of day — `/time set day` fast-forwards to the
 *next* such hour, so runs land on different absolute days, and sun angle, season
