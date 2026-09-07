@@ -17,14 +17,7 @@ set -uo pipefail
 
 WANT="${1:-}"
 
-# CAIRN_HOME wins, then Cairn's pointer file, then the default.
-if [ -z "${CAIRN_HOME:-}" ]; then
-    if [ -f "$HOME/.cairn/home" ]; then
-        CAIRN_HOME="$(tr -d '[:space:]' < "$HOME/.cairn/home")"
-    else
-        CAIRN_HOME="$HOME/.cairn"
-    fi
-fi
+CAIRN_HOME="$(python3 "$(dirname "${BASH_SOURCE[0]}")/cairn_home.py")" || exit 1
 
 # Servers first - a machine may hold both, and a server install is the leaner
 # thing to run headless. A client install contains the server binaries too, so it

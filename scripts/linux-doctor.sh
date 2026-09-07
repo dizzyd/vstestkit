@@ -22,7 +22,7 @@ echo "  cores: $(nproc 2>/dev/null || echo '?')"
 echo
 
 echo "Game install (Cairn)"
-CAIRN_HOME="${CAIRN_HOME:-$HOME/.cairn}"
+CAIRN_HOME="$(python3 "$(dirname "${BASH_SOURCE[0]}")/cairn_home.py")" || exit 1
 if [ -d "$CAIRN_HOME/games" ] && ls "$CAIRN_HOME/games" >/dev/null 2>&1; then
     ok "client installs: $(ls "$CAIRN_HOME/games" | tr '\n' ' ')"
 else

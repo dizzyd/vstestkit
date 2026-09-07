@@ -39,6 +39,9 @@ bash scripts/stop.sh
 `boot.sh` resolves the game install through **Cairn** (`scripts/cairn-env.sh`),
 which knows each install's architecture and required .NET. `VINTAGE_STORY`
 overrides it; `VSTK_GAME_VERSION=1.22.6` picks a specific install.
+Launch setup, session import, and Linux diagnostics share `scripts/cairn_home.py`:
+`CAIRN_HOME` wins, then the `~/.cairn/home` pointer, then `~/.cairn`.
+`CAIRN_DEFAULT_HOME` moves the default and its pointer lookup for sandboxed runs.
 
 Client runs normally reuse cached credentials offline. For a first login or
 recovery, use `VSTK_LOGIN=1 bash scripts/boot.sh --client`: it permits an empty

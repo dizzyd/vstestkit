@@ -21,6 +21,7 @@ Usage:
 Prints where the session came from, never what it contains.
 """
 import argparse, json, os, stat, sys, tempfile
+from cairn_home import cairn_home
 
 # The auth-bearing keys, all inside "stringSettings".
 KEYS = [
@@ -110,21 +111,6 @@ def capture(settings_path, dest):
             os.unlink(temp)
     print(f"session captured to {dest}")
     return 0
-
-
-def cairn_home():
-    home = os.path.expanduser("~")
-    if os.environ.get("CAIRN_HOME"):
-        return os.environ["CAIRN_HOME"]
-    pointer = os.path.join(home, ".cairn", "home")
-    if os.path.isfile(pointer):
-        try:
-            root = open(pointer).read().strip()
-            if root:
-                return root
-        except OSError:
-            pass
-    return os.path.join(home, ".cairn")
 
 
 def cairn_session():
