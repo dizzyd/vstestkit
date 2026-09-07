@@ -11,20 +11,6 @@ using Vintagestory.Client.NoObf;
 
 namespace VsTestkit.Testing
 {
-    /// <summary>
-    /// Visual regression: capture the view and compare it against a recorded
-    /// baseline.
-    ///
-    /// Baselines are per-renderer, not per-project. macOS runs a
-    /// forward-compatible GL 4.1 context and Linux gets 4.6; GLLineWidth and
-    /// SmoothLines are no-ops on Mac and not on Linux; and llvmpipe, NVIDIA and
-    /// Apple rasterise differently anyway. One shared baseline would mean one
-    /// machine's is right and every other machine is red.
-    ///
-    /// Comparison is a tolerance over a count of differing pixels rather than a
-    /// byte match, because even the same driver will not reproduce antialiasing
-    /// exactly frame to frame.
-    /// </summary>
     /// <summary>A rectangle of the frame to compare, in pixels.</summary>
     public readonly struct VisualRegion
     {
@@ -42,6 +28,20 @@ namespace VsTestkit.Testing
         public override string ToString() => $"{Width}x{Height}+{X}+{Y}";
     }
 
+    /// <summary>
+    /// Visual regression: capture the view and compare it against a recorded
+    /// baseline.
+    ///
+    /// Baselines are per-renderer, not per-project. macOS runs a
+    /// forward-compatible GL 4.1 context and Linux gets 4.6; GLLineWidth and
+    /// SmoothLines are no-ops on Mac and not on Linux; and llvmpipe, NVIDIA and
+    /// Apple rasterise differently anyway. One shared baseline would mean one
+    /// machine's is right and every other machine is red.
+    ///
+    /// Comparison is a tolerance over a count of differing pixels rather than a
+    /// byte match, because even the same driver will not reproduce antialiasing
+    /// exactly frame to frame.
+    /// </summary>
     public static class Visual
     {
         /// <summary>
@@ -147,25 +147,25 @@ namespace VsTestkit.Testing
         }
 
         /// <summary>
-        /// Compares the current view against the baseline for this renderer.
-        ///
-        /// With no baseline recorded, writes one and passes with a note - the
-        /// first run on a new machine records rather than fails. Set
-        /// VSTK_UPDATE_BASELINES=1 to overwrite existing ones deliberately.
-        /// </summary>
-        /// <summary>
         /// A centred box big enough for a built scene and small enough to leave
         /// out the sky and the far ground.
         ///
         /// The default for a reason: sky gradient and drifting cloud shadows move
         /// between runs and swamp everything else - a full-frame comparison of an
         /// unchanged scene came out at 35% differing pixels, none of it on the
-        /// subject. Pass a region explicitly, or null for the whole frame when
-        /// that is genuinely what you mean.
+        /// subject. Match uses this region unless an explicit region or
+        /// wholeFrame: true is supplied.
         /// </summary>
         public static VisualRegion DefaultRegion(int frameWidth, int frameHeight) =>
             VisualRegion.Centred(frameWidth / 2, frameHeight / 2, frameWidth, frameHeight);
 
+        /// <summary>
+        /// Compares the current view against the baseline for this renderer.
+        ///
+        /// With no baseline recorded, writes one and passes with a note - the
+        /// first run on a new machine records rather than fails. Set
+        /// VSTK_UPDATE_BASELINES=1 to overwrite existing ones deliberately.
+        /// </summary>
         public static async Task Match(
             string name,
             double tolerance = DefaultTolerance,

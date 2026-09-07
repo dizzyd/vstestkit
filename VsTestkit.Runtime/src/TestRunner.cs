@@ -256,7 +256,7 @@ namespace VsTestkit.Testing
             tc.FullName.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0;
 
         /// <summary>
-        /// Starts one test on the server main thread and waits for it here, on the
+        /// Starts one test on the primary game thread and waits for it here, on the
         /// caller's thread.
         ///
         /// The timeout is deliberately observed from outside the game thread: if a

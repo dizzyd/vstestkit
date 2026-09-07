@@ -42,18 +42,6 @@ namespace VsTestkit
         }
 
         /// <summary>
-        /// Turns precipitation off, unless VSTK_WEATHER=1.
-        ///
-        /// Rain is not background scenery in a test: sky-exposed farmland pulls in
-        /// every hour of precipitation since its last update
-        /// (BlockEntitySoilNutrition.updateMoistureLevel walks back through them),
-        /// so advancing the calendar wets soil whether or not anything the test
-        /// did was responsible. A moisture assertion then passes or fails on
-        /// simulated weather, which is a miserable thing to debug.
-        ///
-        /// Set VSTK_WEATHER=1 when the weather is the thing under test.
-        /// </summary>
-        /// <summary>
         /// Puts the world at a fixed date before anything renders it.
         ///
         /// Season is baked into chunk meshes when they are tesselated, so the
@@ -112,6 +100,18 @@ namespace VsTestkit
             Hub.Logger?.Notification("[vstestkit] time frozen (VSTK_TIME=1 to let it run)");
         }
 
+        /// <summary>
+        /// Turns precipitation off, unless VSTK_WEATHER=1.
+        ///
+        /// Rain is not background scenery in a test: sky-exposed farmland pulls in
+        /// every hour of precipitation since its last update
+        /// (BlockEntitySoilNutrition.updateMoistureLevel walks back through them),
+        /// so advancing the calendar wets soil whether or not anything the test
+        /// did was responsible. A moisture assertion then passes or fails on
+        /// simulated weather, which is a miserable thing to debug.
+        ///
+        /// Set VSTK_WEATHER=1 when the weather is the thing under test.
+        /// </summary>
         static void StopTheWeather(ICoreServerAPI sapi)
         {
             if (Environment.GetEnvironmentVariable("VSTK_WEATHER") == "1")
