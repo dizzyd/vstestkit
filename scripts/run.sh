@@ -62,16 +62,8 @@ elif [ "${TARGET##*.}" = "csproj" ]; then
         || die "testkit build failed"
     dotnet build "$TARGET" -c "$CONFIG" -v quiet --nologo || die "test project build failed"
 
-    ASM="$(python3 - "$TARGET" "$CONFIG" <<'PY'
-import os, re, sys
-proj, config = sys.argv[1], sys.argv[2]
-text = open(proj).read()
-name = (re.search(r"<AssemblyName>(.*?)</AssemblyName>", text) or [None, os.path.splitext(os.path.basename(proj))[0]])[1]
-out  = (re.search(r"<OutputPath>(.*?)</OutputPath>", text) or [None, os.path.join("bin", config)])[1]
-out  = out.replace("\\", "/").replace("$(Configuration)", config)
-print(os.path.abspath(os.path.join(os.path.dirname(proj), out, name + ".dll")))
-PY
-)"
+    ASM="$(dotnet msbuild "$TARGET" -nologo -getProperty:TargetPath -p:Configuration="$CONFIG")" \
+        || die "could not resolve the built test assembly"
 else
     ASM="$(cd "$(dirname "$TARGET")" && pwd)/$(basename "$TARGET")"
 fi

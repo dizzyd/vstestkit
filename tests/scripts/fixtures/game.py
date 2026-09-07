@@ -19,11 +19,19 @@ stopped = False
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         global stopped
-        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        body = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if self.path == "/v1/tests.load":
+            (data / "last-load.json").write_bytes(body)
+            result = {"count": 1, "tests": []}
+        elif self.path == "/v1/tests.run":
+            result = {"ok": True, "passed": 1, "failed": 0, "errored": 0, "skipped": 0,
+                      "durationMs": 1, "results": [{"name": "fixture", "status": "passed", "durationMs": 1}]}
+        else:
+            result = {"stopping": True}
+            stopped = True
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b'{"ok":true,"result":{"stopping":true}}')
-        stopped = True
+        self.wfile.write(json.dumps({"ok": True, "result": result}).encode())
 
     def log_message(self, *args):
         pass
