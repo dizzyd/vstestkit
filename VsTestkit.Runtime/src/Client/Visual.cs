@@ -293,11 +293,6 @@ namespace VsTestkit.Testing
             return normalised;
         }
 
-        static bool Differs(SKColor p, SKColor q, int threshold) =>
-            Math.Abs(p.Red - q.Red) > threshold ||
-            Math.Abs(p.Green - q.Green) > threshold ||
-            Math.Abs(p.Blue - q.Blue) > threshold;
-
         /// <summary>
         /// Writes the actual capture with differing pixels painted magenta, so a
         /// failure can be looked at rather than reasoned about.
@@ -357,14 +352,6 @@ namespace VsTestkit.Testing
             using var stream = File.OpenWrite(dest);
             data.SaveTo(stream);
         }
-
-        /// <summary>Washes out the unchanged parts so the marked pixels stand out.</summary>
-        static SKColor Fade(SKColor c) =>
-            new SKColor((byte)(192 + c.Red / 4), (byte)(192 + c.Green / 4), (byte)(192 + c.Blue / 4));
-
-        /// <summary>Darkens what was never compared, so the region is visible.</summary>
-        static SKColor Dim(SKColor c) =>
-            new SKColor((byte)(c.Red / 3), (byte)(c.Green / 3), (byte)(c.Blue / 3));
 
         static VisualRegion Clamp(VisualRegion? region, int width, int height)
         {
