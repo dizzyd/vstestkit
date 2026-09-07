@@ -45,3 +45,13 @@ Assert.Equal(0, result.results.Single().output.Count);
 var next = TestRunner.Run("Lifetime.Next", true);
 Assert.Equal("next test finished", next.results.Single().output.Single());
 Console.WriteLine("PASS: timeout retains ownership until teardown completes; its report stays immutable");
+
+TestRunner.Load(fixture);
+var teardown = TestRunner.Run("Teardown", true);
+Assert.False(teardown.Ok);
+Assert.Equal(3, teardown.failed);
+Assert.Equal(1, teardown.errored);
+Assert.Equal(0, teardown.passed);
+Assert.Contains(teardown.results.Single(r => r.method == "AlreadyFailed").message, "body failure");
+foreach (var failure in teardown.results) Assert.True(failure.output.Any(line => line.Contains("cleanup failure")));
+Console.WriteLine("PASS: teardown assertions and errors fail the run without replacing a body failure");

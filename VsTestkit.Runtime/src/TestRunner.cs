@@ -331,7 +331,14 @@ namespace VsTestkit.Testing
                     try { await Invoke(tc.AfterEach, instance); }
                     catch (Exception e)
                     {
-                        result.output.Add("[AfterEach] " + Unwrap(e).Message);
+                        var inner = Unwrap(e);
+                        result.output.Add("[AfterEach] " + inner);
+                        if (result.status == "passed" || result.status == "skipped")
+                        {
+                            result.status = inner is AssertionException ? "failed" : "errored";
+                            result.message = "[AfterEach] " + inner.Message;
+                            result.stack = inner.StackTrace;
+                        }
                     }
                 }
 
