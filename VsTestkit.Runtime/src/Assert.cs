@@ -3,6 +3,7 @@
 using System;
 using System.Collections;
 using System.Linq;
+using System.Numerics;
 using System.Threading.Tasks;
 
 namespace VsTestkit.Testing
@@ -146,14 +147,57 @@ namespace VsTestkit.Testing
         {
             if (a == null || b == null) return ReferenceEquals(a, b);
             if (a.Equals(b)) return true;
-            // Numeric literals in tests are int by default; comparing to a float
-            // field would otherwise fail on type rather than on value.
-            if (IsNumeric(a) && IsNumeric(b)) return Convert.ToDouble(a).Equals(Convert.ToDouble(b));
-            return false;
+            if (a.GetType() == b.GetType() || !IsNumeric(a) || !IsNumeric(b)) return false;
+
+            // Widen integral/decimal values without losing digits. Float widens
+            // exactly to double, but mixing either with decimal needs an exact
+            // comparison rather than rounding one representation into the other.
+            var af = a is float || a is double;
+            var bf = b is float || b is double;
+            if (!af && !bf) return Convert.ToDecimal(a) == Convert.ToDecimal(b);
+            if (af && bf) return Convert.ToDouble(a).Equals(Convert.ToDouble(b));
+            return af
+                ? FloatingEqualsDecimal(Convert.ToDouble(a), Convert.ToDecimal(b))
+                : FloatingEqualsDecimal(Convert.ToDouble(b), Convert.ToDecimal(a));
+        }
+
+        static bool FloatingEqualsDecimal(double binary, decimal number)
+        {
+            if (!double.IsFinite(binary)) return false;
+
+            // Most mixed assertions compare a floating field to an integer
+            // literal. The upper bound is exclusive: double rounds long.MaxValue
+            // up to 2^63, which cannot be cast back to long.
+            if (binary >= long.MinValue && binary < 9223372036854775808d &&
+                binary == Math.Truncate(binary))
+                return number == (long)binary;
+
+            var bits = BitConverter.DoubleToInt64Bits(binary);
+            var exponent = (int)((bits >> 52) & 0x7ff);
+            var significand = new BigInteger(bits & 0x000fffffffffffffL);
+            if (exponent != 0) significand += BigInteger.One << 52;
+            if (bits < 0) significand = -significand;
+            var power = exponent == 0 ? -1074 : exponent - 1075;
+
+            Span<int> parts = stackalloc int[4];
+            decimal.GetBits(number, parts);
+            var unscaled = (BigInteger)(uint)parts[0] +
+                           ((BigInteger)(uint)parts[1] << 32) +
+                           ((BigInteger)(uint)parts[2] << 64);
+            if (parts[3] < 0) unscaled = -unscaled;
+            var scale = (parts[3] >> 16) & 0xff;
+
+            // Compare the exact fractions: significand * 2^power and
+            // unscaled / 10^scale. No conversion may round a difference away.
+            significand *= BigInteger.Pow(10, scale);
+            return power >= 0
+                ? (significand << power) == unscaled
+                : significand == (unscaled << -power);
         }
 
         static bool IsNumeric(object o) =>
-            o is byte || o is short || o is int || o is long ||
+            o is sbyte || o is byte || o is short || o is ushort ||
+            o is int || o is uint || o is long || o is ulong ||
             o is float || o is double || o is decimal;
 
         static string Prefix(string what) => what == null ? "" : what + ": ";

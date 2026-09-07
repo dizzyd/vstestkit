@@ -291,6 +291,10 @@ of letting it pass by luck. `await Until(cond, maxTicks)` beats guessing a count
 | `OnServer()`, `OnClient()` | switch game threads |
 | `Skip("why")` | skip from inside the test, for what an attribute cannot know - a world too flat to dig in, say |
 
+`Assert.Equal` compares numeric values exactly, including mixed numeric types.
+Use `Assert.Close` for a tolerance: decimal `0.1m` and binary `0.1d` are not the
+same exact value.
+
 Attributes: `[VsTest(TimeoutMs = …)]`, `[RequiresClient]` (skipped, not failed, on
 a headless run), `[Skip("why")]`, `[PlotSize(n, height)]`, `[BeforeEach]`,
 `[AfterEach]`.

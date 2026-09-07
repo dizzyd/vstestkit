@@ -1,5 +1,7 @@
 using VsTestkit.Testing;
 
+if (args[0] == "--assertions") { AssertionChecks.Run(); return; }
+
 var fixture = Path.GetFullPath(args[0]);
 using var context = new GameContext();
 Vs.PrimaryCtx = context;
