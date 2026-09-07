@@ -149,13 +149,17 @@ namespace VsTestkit.Testing
         /// Poll a condition once per tick until it holds, or fail after a budget of
         /// ticks. For anything whose timing is not exactly known, this beats
         /// guessing a fixed Ticks() count that is either flaky or needlessly slow.
+        /// The condition is checked before waiting and after the final permitted
+        /// tick; a zero budget can succeed only if it already holds.
         /// </summary>
         public static async Task Until(Func<bool> condition, int maxTicks = 200, string what = null)
         {
+            if (maxTicks < 0) throw new ArgumentOutOfRangeException(nameof(maxTicks));
+            if (condition()) return;
             for (var i = 0; i < maxTicks; i++)
             {
-                if (condition()) return;
                 await Ticks(1);
+                if (condition()) return;
             }
 
             throw new AssertionException(

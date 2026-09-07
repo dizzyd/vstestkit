@@ -120,6 +120,24 @@ namespace VsTestkit.SelfTest
         }
 
         [VsTest]
+        public async Task UntilIncludesTheLastPermittedTick()
+        {
+            var ready = false;
+            var listener = Sapi.Event.RegisterGameTickListener(_ => ready = true, 1);
+            try
+            {
+                await Until(() => ready, 1, "the first tick to run");
+                Assert.True(ready);
+                await Until(() => ready, 0);
+                await Assert.ThrowsAsync<AssertionException>(() => Until(() => false, 0));
+            }
+            finally
+            {
+                Sapi.Event.UnregisterGameTickListener(listener);
+            }
+        }
+
+        [VsTest]
         public async Task EntitiesSpawnAndAreFound()
         {
             var e = World.SpawnEntity("game:chicken-hen", P(8, 1, 8));
