@@ -65,6 +65,11 @@ if [ "${VSTK_KEEP:-0}" != "1" ]; then
     rm -rf "$VSTK_RUN"
 fi
 mkdir -p "$DATA"
+if [ "$MULTIPLAYER" = "1" ]; then
+    echo multiplayer > "$VSTK_RUN/session.mode"
+else
+    echo "$MODE" > "$VSTK_RUN/session.mode"
+fi
 
 SERVER="$(vs_server_cmd)"
 

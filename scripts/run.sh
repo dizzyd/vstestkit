@@ -83,6 +83,13 @@ fi
 STARTED=0
 if [ -f "$(handshake_file)" ] && [ -f "$VSTK_RUN/server.pid" ] \
    && kill -0 "$(cat "$VSTK_RUN/server.pid")" 2>/dev/null; then
+    if [ "$CLIENT_MODE" = "1" ]; then
+        REQUESTED_MODE=client
+        [ "$MULTIPLAYER" = "1" ] && REQUESTED_MODE=multiplayer
+        LIVE_MODE="$(cat "$VSTK_RUN/session.mode" 2>/dev/null || true)"
+        [ "$LIVE_MODE" = "$REQUESTED_MODE" ] || die \
+            "slot '$VSTK_SLOT' is ${LIVE_MODE:-of unknown mode}, but $REQUESTED_MODE was requested; stop it with scripts/stop.sh first"
+    fi
     echo "reusing live session in slot $VSTK_SLOT"
 else
     [ -n "$EXTRA_MODS" ] && export VSTK_EXTRA_MODS="$EXTRA_MODS"

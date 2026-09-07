@@ -323,6 +323,10 @@ off, and the next test then aims at things and selects nothing.
 
 ### Iterating
 
+An explicit `--client` or `--multiplayer` request must match a retained session's
+mode. Stop an incompatible session first; omitting both flags allows reuse of
+whichever mode is already running.
+
 `--keep` leaves the session up. Edit the sources and reload — suites load into a
 collectible context, so a changed suite replaces the old one without a restart:
 
