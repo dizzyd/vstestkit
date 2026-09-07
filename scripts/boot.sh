@@ -90,8 +90,11 @@ if [ "$MODE" = "client" ]; then
 
     # An ephemeral data path has no login, so the client would stop at the sign-in
     # screen. Merge just the auth keys across, the way Cairn does between packs.
-    python3 "$VSTK_ROOT/scripts/session.py" "$DATA/clientsettings.json" \
-        || die "cannot start a client without a login"
+    SESSION_ARGS=("$DATA/clientsettings.json")
+    [ "${VSTK_LOGIN:-0}" = "1" ] && SESSION_ARGS+=(--allow-missing)
+    python3 "$VSTK_ROOT/scripts/session.py" "${SESSION_ARGS[@]}" \
+        || die "could not prepare the client session"
+    export VSTK_SESSION_OUT="$VSTK_ROOT/run/session.json"
 fi
 
 rm -f "$DATA/.vstestkit"
@@ -200,7 +203,9 @@ if [ "$MODE" = "client" ]; then
     #
     # A locally valid key is still required, or the client goes straight to the
     # login screen without asking anyone - but it need not be a *live* one.
-    if [ "${VSTK_ONLINE:-0}" != "1" ]; then
+    if [ "${VSTK_LOGIN:-0}" = "1" ]; then
+        echo "         network=online for manual login"
+    elif [ "${VSTK_ONLINE:-0}" != "1" ]; then
         export HTTPS_PROXY="http://127.0.0.1:9" https_proxy="http://127.0.0.1:9"
         export ALL_PROXY="http://127.0.0.1:9"   all_proxy="http://127.0.0.1:9"
         echo "         network=offline (auth untouched; VSTK_ONLINE=1 to allow)"

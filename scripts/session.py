@@ -15,12 +15,12 @@ client accepts the settings and then prompts for a password anyway. So candidate
 are ranked by modification time, exactly as Cairn's PackData.CaptureLatest does.
 
 Usage:
-  session.py <target-clientsettings.json> [source-clientsettings.json]
+  session.py <target-clientsettings.json> [source-clientsettings.json] [--allow-missing]
   session.py --capture <clientsettings.json> <dest-session.json>
 
 Prints where the session came from, never what it contains.
 """
-import json, os, stat, sys
+import argparse, json, os, stat, sys, tempfile
 
 # The auth-bearing keys, all inside "stringSettings".
 KEYS = [
@@ -92,11 +92,22 @@ def capture(settings_path, dest):
     existing = load(dest)
     if isinstance(existing, dict) and existing.get(CREDENTIAL) == values.get(CREDENTIAL):
         return 0  # unchanged, leave the mtime alone
+    if isinstance(existing, dict) and existing.get(CREDENTIAL):
+        # A live-client snapshot can be newer than the settings left on disk by
+        # a killed client. Never replace that recovered login with the old one.
+        if os.stat(settings_path).st_mtime_ns <= os.stat(dest).st_mtime_ns:
+            return 0
 
     os.makedirs(os.path.dirname(dest), exist_ok=True)
-    with open(dest, "w") as f:
-        json.dump(values, f, indent=2)
-    os.chmod(dest, stat.S_IRUSR | stat.S_IWUSR)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=os.path.dirname(dest), delete=False) as f:
+            temp = f.name
+            json.dump(values, f, indent=2)
+        os.replace(temp, dest)
+    finally:
+        if temp and os.path.exists(temp):
+            os.unlink(temp)
     print(f"session captured to {dest}")
     return 0
 
@@ -186,7 +197,7 @@ def apply(target, values, source):
     return 0
 
 
-def main(target, explicit=None):
+def main(target, explicit=None, allow_missing=False):
     if explicit:
         values = session_of(explicit)
         if not values:
@@ -199,6 +210,10 @@ def main(target, explicit=None):
         _, path, values = found
         return apply(target, values, path)
 
+    if allow_missing:
+        print("no cached session; starting the client for manual login")
+        return 0
+
     print("no logged-in session found; the client will stop at the login screen.\n"
           "Log in once in the normal game or through Cairn, or point "
           "VSTK_CLIENT_SETTINGS at a settings file that is logged in.", file=sys.stderr)
@@ -206,6 +221,16 @@ def main(target, explicit=None):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--capture":
-        sys.exit(capture(sys.argv[2], sys.argv[3]))
-    sys.exit(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--capture", nargs=2, metavar=("SETTINGS", "DEST"))
+    parser.add_argument("--allow-missing", action="store_true")
+    parser.add_argument("target", nargs="?")
+    parser.add_argument("source", nargs="?")
+    args = parser.parse_args()
+    if args.capture:
+        if args.target or args.source or args.allow_missing:
+            parser.error("--capture cannot be combined with session import arguments")
+        sys.exit(capture(*args.capture))
+    if not args.target:
+        parser.error("a target clientsettings.json is required")
+    sys.exit(main(args.target, args.source, args.allow_missing))

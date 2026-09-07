@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Dave (Dizzy) Smith
 using System;
+using System.Threading;
 using Vintagestory.API.Client;
 using Vintagestory.API.Common;
 using Vintagestory.API.Config;
@@ -50,6 +51,9 @@ namespace VsTestkit
                 Testing.Vs.AttachClient(api);
                 Start(api);
             }
+            // Save marshals back to the client thread; do not block that thread
+            // while StartClientSide is still attaching the mod.
+            if (Enabled) ThreadPool.QueueUserWorkItem(_ => SessionVerbs.AutoSave());
         }
 
         static void Start(ICoreAPI api)

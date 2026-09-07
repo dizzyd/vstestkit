@@ -40,6 +40,15 @@ bash scripts/stop.sh
 which knows each install's architecture and required .NET. `VINTAGE_STORY`
 overrides it; `VSTK_GAME_VERSION=1.22.6` picks a specific install.
 
+Client runs normally reuse cached credentials offline. For a first login or
+recovery, use `VSTK_LOGIN=1 bash scripts/boot.sh --client`: it permits an empty
+cache, allows authentication traffic, and waits up to 15 minutes for sign-in.
+A new login supersedes the account's previous session.
+
+The attached client saves its session to private `run/session.json`, outside the
+ephemeral run directory. Shutdown also captures newer settings written to disk;
+stale settings cannot overwrite a newer live-client snapshot.
+
 ## Where to run it
 
 | | |

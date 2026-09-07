@@ -7,6 +7,13 @@ source "$(dirname "$0")/registry.sh"
 
 PEER_PIDFILE="$VSTK_RUN/peer-server.pid"
 
+capture_session() {
+    local settings="$VSTK_RUN/data/clientsettings.json"
+    [ -f "$settings" ] || return 0
+    python3 "$VSTK_ROOT/scripts/session.py" --capture "$settings" "$VSTK_ROOT/run/session.json" \
+        || echo "note: no client session could be captured" >&2
+}
+
 # In a multiplayer session the headless peer is a second process. It holds no display
 # but it does hold the game port and the slot, so leaving it behind makes the next
 # boot fail with a port already in use.
@@ -35,6 +42,7 @@ PIDFILE="$VSTK_RUN/server.pid"
 if [ ! -f "$PIDFILE" ]; then
     stop_display
     stop_peer
+    capture_session
     # No game of ours, but a registry entry can outlive one that was killed by
     # hand. Clearing it here is what keeps `scripts/slots` honest.
     release_slot
@@ -50,6 +58,7 @@ fi
 finish() {
     stop_display
     stop_peer
+    capture_session
     rm -f "$PIDFILE"
     release_slot
 }

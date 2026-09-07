@@ -13,6 +13,13 @@ if "--genconfig" in args:
     (data / "serverconfig.json").write_text("{}")
     sys.exit(0)
 
+client = Path(sys.argv[0]).name == "Vintagestory"
+if client:
+    (data / "initial-settings.json").write_bytes((data / "clientsettings.json").read_bytes())
+    (data / "initial-proxy.json").write_text(json.dumps({
+        key: os.environ.get(key) for key in ("HTTPS_PROXY", "ALL_PROXY")
+    }))
+
 stopped = False
 
 
@@ -40,9 +47,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
 with http.server.HTTPServer(("127.0.0.1", 0), Handler) as server:
     server.timeout = 0.1
     (data / ".vstestkit").write_text(json.dumps({
-        "port": server.server_port, "token": "fixture", "pid": os.getpid(), "sides": ["server"]
+        "port": server.server_port, "token": "fixture", "pid": os.getpid(),
+        "sides": ["server", "client"] if client else ["server"]
     }))
     (data.parent / "started.pid").write_text(str(os.getpid()))
     while not stopped:
         server.handle_request()
 (data.parent / "stopped").touch()
+if client and os.environ.get("VSTK_LOGIN") == "1":
+    settings = json.loads((data / "clientsettings.json").read_text())
+    settings.setdefault("stringSettings", {})["sessionkey"] = "manual-fixture"
+    (data / "clientsettings.json").write_text(json.dumps(settings))

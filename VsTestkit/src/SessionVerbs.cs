@@ -88,9 +88,21 @@ namespace VsTestkit
             var dir = Path.GetDirectoryName(Path.GetFullPath(path));
             if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
 
-            File.WriteAllText(path, JsonConvert.SerializeObject(values, Formatting.Indented));
+            var temp = Path.Combine(dir, "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N"));
+            var options = new FileStreamOptions { Mode = FileMode.CreateNew, Access = FileAccess.Write };
             if (!OperatingSystem.IsWindows())
-                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                options.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
+            try
+            {
+                using (var stream = new FileStream(temp, options))
+                using (var writer = new StreamWriter(stream))
+                    writer.Write(JsonConvert.SerializeObject(values, Formatting.Indented));
+                File.Move(temp, path, overwrite: true);
+            }
+            finally
+            {
+                if (File.Exists(temp)) File.Delete(temp);
+            }
 
             return new { saved = true, path = Path.GetFullPath(path), keys = values.Count };
         }
