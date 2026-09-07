@@ -293,6 +293,9 @@ a headless run), `[Skip("why")]`, `[PlotSize(n, height)]`, `[BeforeEach]`,
 `[AfterEach]`.
 Teardown failures fail the test too; an existing body failure remains the primary
 diagnostic, with the teardown exception retained in its output.
+Tests and hooks must be public, non-generic instance methods with no parameters.
+Use synchronous `void` or return `Task`; unsupported signatures, including
+`async void`, are rejected when the suite loads.
 
 Client-side helpers hop to the client thread and return you to the side you
 started on, so a test can stay on the server thread and still click things.

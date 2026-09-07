@@ -4,6 +4,18 @@ var fixture = Path.GetFullPath(args[0]);
 using var context = new GameContext();
 Vs.PrimaryCtx = context;
 
+if (args.Length > 1)
+{
+    TestRunner.Load(fixture);
+    var error = Assert.Throws<InvalidOperationException>(() => TestRunner.Load(args[1]));
+    Assert.Contains(error.Message, "InvalidFixture.Bad");
+    Assert.Equal(fixture, TestRunner.LoadedPath);
+    Assert.Equal(Path.GetDirectoryName(fixture), TestRunner.SuiteDir);
+    Assert.Equal(1, TestRunner.Run("Lifetime.Next", true).passed);
+    Console.WriteLine("PASS: invalid signature rejected at load; previous suite remains usable");
+    return;
+}
+
 TaskCompletionSource Gate(string field) =>
     (TaskCompletionSource)TestRunner.Loaded.First(t => t.ClassName == "Lifetime")
         .DeclaringType.GetField(field).GetValue(null);

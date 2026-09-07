@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.Loader;
 using System.Threading;
 using System.Threading.Tasks;
@@ -83,10 +84,17 @@ namespace VsTestkit.Testing
                 var cases = new List<TestCase>();
                 foreach (var type in SafeTypes(asm))
                 {
-                    var before = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                                     .FirstOrDefault(m => m.GetCustomAttribute<BeforeEachAttribute>() != null);
-                    var after = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                                    .FirstOrDefault(m => m.GetCustomAttribute<AfterEachAttribute>() != null);
+                    var methods = type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
+                                                  BindingFlags.Instance | BindingFlags.Static);
+                    foreach (var method in methods)
+                    {
+                        if (method.IsDefined(typeof(VsTestAttribute)) ||
+                            method.IsDefined(typeof(BeforeEachAttribute)) ||
+                            method.IsDefined(typeof(AfterEachAttribute)))
+                            ValidateSignature(method);
+                    }
+                    var before = methods.FirstOrDefault(m => m.GetCustomAttribute<BeforeEachAttribute>() != null);
+                    var after = methods.FirstOrDefault(m => m.GetCustomAttribute<AfterEachAttribute>() != null);
 
                     var classSkip = type.GetCustomAttribute<SkipAttribute>();
                     var classClient = type.GetCustomAttribute<RequiresClientAttribute>() != null;
@@ -94,7 +102,7 @@ namespace VsTestkit.Testing
                     var classSp = type.GetCustomAttribute<SingleplayerOnlyAttribute>() != null;
                     var classPlot = type.GetCustomAttribute<PlotSizeAttribute>();
 
-                    foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                    foreach (var m in methods)
                     {
                         var attr = m.GetCustomAttribute<VsTestAttribute>();
                         if (attr == null) continue;
@@ -135,6 +143,19 @@ namespace VsTestkit.Testing
                 nextContext.Unload();
                 throw;
             }
+        }
+
+        static void ValidateSignature(MethodInfo method)
+        {
+            var asyncVoid = method.ReturnType == typeof(void) &&
+                            method.IsDefined(typeof(AsyncStateMachineAttribute));
+            if (!method.IsPublic || method.IsStatic || method.ContainsGenericParameters ||
+                method.GetParameters().Length != 0 || asyncVoid ||
+                (method.ReturnType != typeof(void) && !typeof(Task).IsAssignableFrom(method.ReturnType)))
+                throw new InvalidOperationException(
+                    $"{method.DeclaringType.FullName}.{method.Name}: tests and hooks must be public, " +
+                    "non-generic instance methods with no parameters, returning Task or synchronous void; " +
+                    "async void cannot be awaited");
         }
 
         static IEnumerable<Type> SafeTypes(Assembly asm)
