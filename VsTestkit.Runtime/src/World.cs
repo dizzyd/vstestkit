@@ -185,9 +185,12 @@ namespace VsTestkit.Testing
         /// rather than to zero, so the handler still receives the dt it expects.
         /// Handing it the whole server uptime would be a lie that some mods act
         /// on.
+        /// Exhausting the observation budget fails the assertion; it does not
+        /// cancel listeners that have already been scheduled.
         /// </summary>
         public static async Task TickNow(BlockPos pos, int maxTicks = 20)
         {
+            if (maxTicks < 0) throw new ArgumentOutOfRangeException(nameof(maxTicks));
             var sapi = Vs.RequireServer();
             var rewound = Rewind(sapi, pos);
 
@@ -202,6 +205,8 @@ namespace VsTestkit.Testing
                 await Vs.Ticks(1);
                 if (Rewound(sapi, pos)) return;
             }
+            throw new AssertionException(
+                $"tick listeners at {Show(pos)} did not complete within {maxTicks} ticks");
         }
 
         /// <summary>How many tick listeners are registered at a position.</summary>

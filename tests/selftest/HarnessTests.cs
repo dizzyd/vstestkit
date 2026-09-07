@@ -138,6 +138,27 @@ namespace VsTestkit.SelfTest
         }
 
         [VsTest]
+        public async Task TickNowRequiresObservedCompletion()
+        {
+            var pos = P(4, 1, 4);
+            var firings = 0;
+            var listener = Sapi.Event.RegisterGameTickListener((world, at, dt) => firings++, pos, 60000);
+            try
+            {
+                await Ticks(1);
+                var before = firings;
+                await Assert.ThrowsAsync<AssertionException>(() => World.TickNow(pos, maxTicks: 0));
+                Assert.Equal(before, firings, "no tick has run with a zero budget");
+                await World.TickNow(pos);
+                Assert.Greater(firings, before, "the callback ran before TickNow returned");
+            }
+            finally
+            {
+                Sapi.Event.UnregisterGameTickListener(listener);
+            }
+        }
+
+        [VsTest]
         public async Task EntitiesSpawnAndAreFound()
         {
             var e = World.SpawnEntity("game:chicken-hen", P(8, 1, 8));
