@@ -41,6 +41,7 @@ lock_registry() {
         i=$((i + 1))
         [ "$i" -gt 150 ] && die "could not take the registry lock ($d)"
     done
+    return 0
 }
 
 unlock_registry() { rm -rf "$VSTK_STATE/registry.lock"; }
