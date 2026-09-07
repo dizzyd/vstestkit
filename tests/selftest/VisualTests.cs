@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Dave (Dizzy) Smith
-using System.IO;
 using System.Threading.Tasks;
 using VsTestkit.Testing;
 using static VsTestkit.Testing.Vs;
@@ -76,8 +75,9 @@ namespace VsTestkit.SelfTest
         {
             await Compose();
 
-            // Record what this scene looks like, under a name of its own.
-            await Visual.Match("change-detection", region: Wall);
+            // This test measures change detection, not baseline-update policy.
+            // Its before/after captures must never overwrite a committed baseline.
+            var before = await Visual.Capture("change-before");
 
             // Now change it, materially but not enormously: one column of the
             // wall swapped. If the comparison were vacuous - always passing, or
@@ -85,15 +85,12 @@ namespace VsTestkit.SelfTest
             for (var y = 1; y <= 4; y++) World.SetBlock("game:soil-medium-none", P(6, y, 12));
             await Ticks(4);
 
-            var e = await Assert.ThrowsAsync<AssertionException>(
-                () => Visual.Match("change-detection", region: Wall));
-
-            Assert.Contains(e.Message, "of pixels differ");
-            Log(e.Message.Split('\n')[0]);
-
-            // A failure has to leave something to look at.
-            var diff = Path.Combine(Visual.ArtifactDir, "change-detection.diff.png");
-            Assert.True(File.Exists(diff), "a diff image is written on failure: " + diff);
+            var after = await Visual.Capture("change-after");
+            var comparison = Visual.Compare(before, after, Visual.DefaultPixelThreshold, Wall);
+            Assert.False(comparison.SizeMismatch, "both captures use the same viewport");
+            Assert.Greater(comparison.Fraction, Visual.DefaultTolerance,
+                "the changed column must exceed the visual tolerance");
+            Log($"{comparison.Fraction:P3} of pixels differ between the before and after captures");
         }
 
         [VsTest]
