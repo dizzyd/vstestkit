@@ -31,6 +31,7 @@ namespace VsTestkit.Testing
         static IReadOnlyList<TestCase> loaded = Array.Empty<TestCase>();
         static string loadedPath;
         static readonly SemaphoreSlim operation = new SemaphoreSlim(1, 1);
+        const int LifecycleAllowanceMs = 30000;
 
         public static IReadOnlyList<TestCase> Loaded => loaded;
         public static string LoadedPath => loadedPath;
@@ -106,6 +107,9 @@ namespace VsTestkit.Testing
                     {
                         var attr = m.GetCustomAttribute<VsTestAttribute>();
                         if (attr == null) continue;
+                        if (attr.TimeoutMs <= 0 || attr.TimeoutMs > int.MaxValue - LifecycleAllowanceMs)
+                            throw new InvalidOperationException(
+                                $"{type.FullName}.{m.Name}: TimeoutMs must be between 1 and {int.MaxValue - LifecycleAllowanceMs}");
 
                         var skip = m.GetCustomAttribute<SkipAttribute>() ?? classSkip;
                         var plot = m.GetCustomAttribute<PlotSizeAttribute>() ?? classPlot;
@@ -265,24 +269,26 @@ namespace VsTestkit.Testing
             var sw = Stopwatch.StartNew();
 
             var tcs = new TaskCompletionSource<TestResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var bodyStarted = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var bodyFinished = new TaskCompletionSource<long>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             Vs.PrimaryCtx.Post(_ =>
             {
-                RunOneAsync(tc, plotIndex, result)
+                RunOneAsync(tc, plotIndex, result, bodyStarted, bodyFinished)
                     .ContinueWith(t => tcs.TrySetResult(result), TaskContinuationOptions.ExecuteSynchronously);
             }, null);
             pending = tcs.Task;
 
-            // Budget beyond the test's own timeout to cover plot setup and teardown.
-            var budget = tc.TimeoutMs + 30000;
-            if (!((IAsyncResult)tcs.Task).AsyncWaitHandle.WaitOne(budget))
+            var budget = tc.TimeoutMs + LifecycleAllowanceMs;
+            int Remaining() => (int)Math.Max(0, budget - sw.ElapsedMilliseconds);
+
+            TestResult Timeout(string reason)
             {
                 // The unfinished body still owns result; never return that mutable
                 // object to a caller that may already be serializing its report.
                 var timeout = TestResult.For(tc, TestStatus.TimedOut);
-                timeout.message =
-                    $"did not finish within {budget}ms. The game thread may be blocked; " +
-                    "remaining tests were not run because the world state is now unknown.";
+                timeout.message = reason +
+                    ". Remaining tests were not run because the world state is now unknown.";
                 timeout.durationMs = sw.ElapsedMilliseconds;
 
                 summary.aborted = true;
@@ -290,11 +296,33 @@ namespace VsTestkit.Testing
                 return timeout;
             }
 
+            var overallTimeout = $"did not finish setup, body and teardown within {budget}ms";
+            if (!Task.WhenAny(bodyStarted.Task, tcs.Task).Wait(Remaining()))
+                return Timeout(overallTimeout);
+
+            if (bodyStarted.Task.IsCompleted)
+            {
+                var start = bodyStarted.Task.Result;
+                var bodyRemaining = (int)Math.Max(0, Math.Ceiling(
+                    tc.TimeoutMs - Stopwatch.GetElapsedTime(start).TotalMilliseconds));
+                var remaining = Remaining();
+                if (!bodyFinished.Task.Wait(Math.Min(bodyRemaining, remaining)))
+                    return Timeout(bodyRemaining <= remaining
+                        ? $"test body exceeded {tc.TimeoutMs}ms" : overallTimeout);
+                // The RPC thread may observe completion late; measure the body,
+                // not how long this thread happened to wait for its signal.
+                if (Stopwatch.GetElapsedTime(start, bodyFinished.Task.Result).TotalMilliseconds > tc.TimeoutMs)
+                    return Timeout($"test body exceeded {tc.TimeoutMs}ms");
+            }
+
+            if (!tcs.Task.Wait(Remaining())) return Timeout(overallTimeout);
+
             result.durationMs = sw.ElapsedMilliseconds;
             return result;
         }
 
-        static async Task RunOneAsync(TestCase tc, int plotIndex, TestResult result)
+        static async Task RunOneAsync(TestCase tc, int plotIndex, TestResult result,
+                                     TaskCompletionSource<long> bodyStarted, TaskCompletionSource<long> bodyFinished)
         {
             TestOutput.Begin(result.output);
             object instance = null;
@@ -313,7 +341,9 @@ namespace VsTestkit.Testing
                 instance = Activator.CreateInstance(tc.DeclaringType);
 
                 if (tc.BeforeEach != null) await Invoke(tc.BeforeEach, instance);
-                await Invoke(tc.Method, instance);
+                bodyStarted.TrySetResult(Stopwatch.GetTimestamp());
+                try { await Invoke(tc.Method, instance); }
+                finally { bodyFinished.TrySetResult(Stopwatch.GetTimestamp()); }
             }
             catch (AssertionException e)
             {

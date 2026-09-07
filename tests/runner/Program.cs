@@ -18,8 +18,8 @@ if (args.Length > 1)
     return;
 }
 
-TaskCompletionSource Gate(string field) =>
-    (TaskCompletionSource)TestRunner.Loaded.First(t => t.ClassName == "Lifetime")
+TaskCompletionSource Gate(string field, string className = "Lifetime") =>
+    (TaskCompletionSource)TestRunner.Loaded.First(t => t.ClassName == className)
         .DeclaringType.GetField(field).GetValue(null);
 
 async Task WaitForIdle()
@@ -48,7 +48,7 @@ Console.WriteLine("PASS: concurrent runs and reloads are rejected without steali
 TestRunner.Load(fixture);
 held = Task.Run(() => TestRunner.Run("Lifetime.Held", true));
 await Gate("Entered").Task.WaitAsync(TimeSpan.FromSeconds(5));
-result = await held.WaitAsync(TimeSpan.FromSeconds(40));
+result = await held.WaitAsync(TimeSpan.FromSeconds(5));
 Assert.Equal(1, result.timedOut);
 Assert.Throws<InvalidOperationException>(() => TestRunner.Run("Lifetime.Next", true));
 Assert.Throws<InvalidOperationException>(() => TestRunner.Load(fixture));
@@ -69,3 +69,14 @@ Assert.Equal(0, teardown.passed);
 Assert.Contains(teardown.results.Single(r => r.method == "AlreadyFailed").message, "body failure");
 foreach (var failure in teardown.results) Assert.True(failure.output.Any(line => line.Contains("cleanup failure")));
 Console.WriteLine("PASS: teardown assertions and errors fail the run without replacing a body failure");
+
+TestRunner.Load(fixture);
+var timing = Task.Run(() => TestRunner.Run("Timing.Body", true));
+await Gate("Preparing", "Timing").Task.WaitAsync(TimeSpan.FromSeconds(5));
+await Task.Delay(100);
+Gate("Prepared", "Timing").SetResult();
+await Gate("Cleaning", "Timing").Task.WaitAsync(TimeSpan.FromSeconds(5));
+await Task.Delay(100);
+Gate("Cleaned", "Timing").SetResult();
+Assert.Equal(1, (await timing).passed);
+Console.WriteLine("PASS: preparation and teardown do not consume the body's timeout");

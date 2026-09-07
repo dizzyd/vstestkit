@@ -5,7 +5,7 @@ public class Lifetime
     public static TaskCompletionSource Entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public static TaskCompletionSource Release = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    [VsTest(TimeoutMs = 10)]
+    [VsTest(TimeoutMs = 500)]
     public async Task Held()
     {
         Entered.SetResult();

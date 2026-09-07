@@ -313,6 +313,10 @@ Tests and hooks must be public, non-generic instance methods with no parameters.
 Use synchronous `void` or return `Task`; unsupported signatures, including
 `async void`, are rejected when the suite loads.
 
+`TimeoutMs` limits the test body itself, not its hooks. A separate overall
+watchdog allows `TimeoutMs + 30,000 ms` for setup, body and teardown together.
+Timeouts are observed off the game thread, including when that thread is blocked.
+
 Client-side helpers hop to the client thread and return you to the side you
 started on, so a test can stay on the server thread and still click things.
 
