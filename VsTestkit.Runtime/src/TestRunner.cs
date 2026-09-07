@@ -345,57 +345,40 @@ namespace VsTestkit.Testing
                 try { await Invoke(tc.Method, instance); }
                 finally { bodyFinished.TrySetResult(Stopwatch.GetTimestamp()); }
             }
-            catch (AssertionException e)
-            {
-                result.status = TestStatus.Failed.ToString().ToLowerInvariant();
-                result.message = e.Message;
-            }
-            catch (SkipException e)
-            {
-                result.status = TestStatus.Skipped.ToString().ToLowerInvariant();
-                result.message = e.Message;
-            }
-            catch (Exception e)
-            {
-                var inner = Unwrap(e);
-                if (inner is AssertionException)
-                {
-                    result.status = TestStatus.Failed.ToString().ToLowerInvariant();
-                    result.message = inner.Message;
-                }
-                else if (inner is SkipException)
-                {
-                    result.status = TestStatus.Skipped.ToString().ToLowerInvariant();
-                    result.message = inner.Message;
-                }
-                else
-                {
-                    result.status = TestStatus.Errored.ToString().ToLowerInvariant();
-                    result.message = inner.GetType().Name + ": " + inner.Message;
-                    result.stack = inner.StackTrace;
-                }
-            }
+            catch (Exception e) { RecordException(result, e); }
             finally
             {
                 if (tc.AfterEach != null && instance != null)
                 {
                     try { await Invoke(tc.AfterEach, instance); }
-                    catch (Exception e)
-                    {
-                        var inner = Unwrap(e);
-                        result.output.Add("[AfterEach] " + inner);
-                        if (result.status == "passed" || result.status == "skipped")
-                        {
-                            result.status = inner is AssertionException ? "failed" : "errored";
-                            result.message = "[AfterEach] " + inner.Message;
-                            result.stack = inner.StackTrace;
-                        }
-                    }
+                    catch (Exception e) { RecordException(result, e, teardown: true); }
                 }
 
                 Vs.Plot = null;
                 TestOutput.End();
             }
+        }
+
+        static void RecordException(TestResult result, Exception error, bool teardown = false)
+        {
+            var inner = Unwrap(error);
+            if (teardown)
+            {
+                result.output.Add("[AfterEach] " + inner);
+                // A skipped body does not excuse failed cleanup.
+                if (result.status != "passed" && result.status != "skipped") return;
+            }
+
+            result.status = inner switch
+            {
+                AssertionException => "failed",
+                SkipException when !teardown => "skipped",
+                _ => "errored"
+            };
+            result.message = teardown ? "[AfterEach] " + inner.Message
+                : result.status == "errored" ? inner.GetType().Name + ": " + inner.Message
+                : inner.Message;
+            result.stack = teardown || result.status == "errored" ? inner.StackTrace : null;
         }
 
         /// <summary>

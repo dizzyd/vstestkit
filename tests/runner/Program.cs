@@ -80,3 +80,10 @@ await Task.Delay(100);
 Gate("Cleaned", "Timing").SetResult();
 Assert.Equal(1, (await timing).passed);
 Console.WriteLine("PASS: preparation and teardown do not consume the body's timeout");
+
+var classified = TestRunner.Run("Classification", true);
+Assert.Equal(2, classified.failed);
+Assert.Equal(2, classified.skipped);
+Assert.Equal(1, classified.errored);
+Assert.Equal(0, classified.passed);
+Console.WriteLine("PASS: direct and wrapped exceptions follow the same result policy");
