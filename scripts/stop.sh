@@ -33,6 +33,7 @@ stop_peer() {
 
 PIDFILE="$VSTK_RUN/server.pid"
 if [ ! -f "$PIDFILE" ]; then
+    stop_display
     stop_peer
     # No game of ours, but a registry entry can outlive one that was killed by
     # hand. Clearing it here is what keeps `scripts/slots` honest.

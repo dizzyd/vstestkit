@@ -49,13 +49,12 @@ BOOTED=0
 on_exit() {
     [ "$VSTK_CLAIMED" = "1" ] || return 0
     [ "$BOOTED" = "1" ] && return 0
-    # A boot that gave up waiting may still have left a live game behind. The
-    # slot belongs to that process until stop.sh takes it down; releasing here
-    # would let the next boot rm -rf the run directory underneath it.
-    if [ -f "$VSTK_RUN/server.pid" ] && kill -0 "$(cat "$VSTK_RUN/server.pid")" 2>/dev/null; then
-        return 0
-    fi
-    release_slot
+    # Startup owns every child it launched, including a peer or display created
+    # before the main game's pidfile exists. Release the slot only through the
+    # same teardown path a successful boot uses.
+    VSTK_SLOT="$VSTK_SLOT" VSTK_RUN="$VSTK_RUN" VSTK_STATE="$VSTK_STATE" \
+        bash "$VSTK_ROOT/scripts/stop.sh" \
+        || echo "error: startup cleanup failed; slot '$VSTK_SLOT' was not released" >&2
 }
 trap on_exit EXIT
 
