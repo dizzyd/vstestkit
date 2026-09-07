@@ -55,7 +55,7 @@ the game's TCP port, the virtual display, the entry in the box-wide registry.
 
 ```bash
 bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../olla/olla   # -> ~/vstestkit-olla
-ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh ~/mods/olla/tests --mod ~/mods/olla/olla --client'
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh mods/olla/tests --mod mods/olla/olla --client'
 ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/slots'   # what else is running
 ```
 
@@ -69,6 +69,9 @@ migration.
 rsyncs `--delete`, so a shared tree means every push swaps the harness under
 whoever is mid-run — and the harness is under development too. It also refuses to
 push into a slot whose session is live; `--force` overrides.
+Synced mods live under that checkout's `mods/<name>/`, not a shared `~/mods`
+directory. Two slots can therefore run different revisions of the same mod;
+a harness-only sync preserves the slot's existing mod trees.
 
 What the registry (`~/.vstestkit`, deliberately outside every checkout) buys:
 

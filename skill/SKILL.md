@@ -40,7 +40,7 @@ for the unnamed `default` slot).
 
 ```bash
 bash scripts/sync-linux.sh dizzyd@vsclient.home --mod ../olla/olla
-ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh ~/mods/olla/tests --mod ~/mods/olla/olla --client'
+ssh dizzyd@vsclient.home 'cd vstestkit-olla && bash scripts/run.sh mods/olla/tests --mod mods/olla/olla --client'
 ```
 
 ### The box is shared, so work in a slot

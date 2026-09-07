@@ -57,9 +57,9 @@ resolve_vintage_story
 dotnet build "$VSTK_ROOT/VsTestkit/VsTestkit.csproj" -c "${VSTK_CONFIG:-Debug}" -v quiet --nologo \
     || die "build failed; not shipping a stale mod"
 
-# run/ is the box's own ephemeral state and must not be overwritten from here.
+# Run state and synchronized mods belong to this remote slot, not the local tree.
 rsync -a --delete \
-    --exclude 'run/' --exclude 'obj/' --exclude '.git/' \
+    --exclude 'run/' --exclude '/mods/' --exclude 'obj/' --exclude '.git/' \
     "$VSTK_ROOT/" "$HOST:$DEST/"
 
 # A mod under test ships the same way: built IL plus its unbuilt assets, and its
@@ -68,9 +68,10 @@ for mod in ${MODS[@]+"${MODS[@]}"}; do
     name="$(basename "$(dirname "$mod")")"
     dotnet build "$mod"/*.csproj -c "${VSTK_CONFIG:-Debug}" -v quiet --nologo >/dev/null \
         || die "build failed for $mod"
-    ssh "$HOST" "mkdir -p mods/$name"
-    rsync -a --delete --exclude 'obj/' "$(dirname "$mod")/" "$HOST:mods/$name/"
-    echo "  mod $name -> $HOST:mods/$name"
+    mod_dest="$DEST/mods/$name"
+    ssh "$HOST" "mkdir -p $(printf '%q' "$mod_dest")"
+    rsync -a --delete --exclude 'obj/' "$(dirname "$mod")/" "$HOST:$mod_dest/"
+    echo "  mod $name -> $HOST:$mod_dest"
 done
 
 echo "synced to $HOST:$DEST  (slot $SLOT)"
@@ -78,7 +79,7 @@ echo
 echo "  ssh $HOST 'cd $DEST && bash scripts/linux-doctor.sh'"
 if [ "${#MODS[@]}" = 1 ]; then
     name="$(basename "$(dirname "${MODS[0]}")")"
-    echo "  ssh $HOST 'cd $DEST && bash scripts/run.sh ~/mods/$name/tests --mod ~/mods/$name/$(basename "${MODS[0]}") --client'"
+    echo "  ssh $HOST 'cd $DEST && bash scripts/run.sh mods/$name/tests --mod mods/$name/$(basename "${MODS[0]}") --client'"
 else
     echo "  ssh $HOST 'cd $DEST && bash scripts/run.sh tests/selftest --client'"
 fi
