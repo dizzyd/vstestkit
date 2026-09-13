@@ -74,4 +74,24 @@ wc["WorldConfiguration"] = dict(style.get("worldConfig") or {
     "loreContent": "false",
 })
 
+# An override for anything in WorldConfiguration, as "key=value" pairs.
+#
+# landcover is the one this exists for. GenMaps reads it with a default of "1",
+# which is all land, and neither testkit playstyle sets it - so whether a world
+# has any coast at all was down to the seed, and a suite testing anything about
+# water could only hope. VSTK_WORLDCONFIG=landcover=0.4 gives it one.
+#
+# Values are strings because that is how the game reads them: worldConfig.GetString
+# then ToFloat, so a number written as a JSON number is not found.
+overrides = os.environ.get("VSTK_WORLDCONFIG", "").strip()
+if overrides:
+    for pair in overrides.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if "=" not in pair:
+            sys.exit(f"VSTK_WORLDCONFIG entries are key=value, got '{pair}'")
+        key, _, value = pair.partition("=")
+        wc["WorldConfiguration"][key.strip()] = value.strip()
+
 json.dump(cfg, open(path, "w"), indent=2)

@@ -6,6 +6,7 @@
 #   bash scripts/boot.sh --client        # singleplayer client: BOTH sides, one process
 #   bash scripts/boot.sh --multiplayer   # TWO processes: headless server + client joined to it
 #   VSTK_SEED=99 bash scripts/boot.sh    # a different world
+#   VSTK_WORLDCONFIG=landcover=0.4 bash scripts/boot.sh   # and a world with coasts
 #   VSTK_KEEP=1 bash scripts/boot.sh     # reuse the existing run dir
 #   VSTK_SLOT=olla bash scripts/boot.sh  # a named slot on a shared box
 #
@@ -80,6 +81,7 @@ if [ ! -f "$DATA/serverconfig.json" ]; then
 fi
 
 VSTK_MODE="$MODE" VSTK_GAME_PORT="$VSTK_GAME_PORT" \
+VSTK_WORLDCONFIG="${VSTK_WORLDCONFIG:-}" \
     python3 "$VSTK_ROOT/scripts/writeconfig.py" "$DATA" "$SEED" "$PLAYSTYLE" \
     || die "could not write serverconfig"
 
@@ -148,6 +150,11 @@ rm -f "$DATA/.vstestkit"
 
 echo "booting  install=$VINTAGE_STORY  mode=$MODE  slot=$VSTK_SLOT"
 echo "         data=$DATA  seed=$SEED  playstyle=$PLAYSTYLE  gameport=$VSTK_GAME_PORT"
+# An if, not a && chain: under set -e a false test at statement level ends the
+# script, which is a baffling way for a boot to stop.
+if [ -n "${VSTK_WORLDCONFIG:-}" ]; then
+    echo "         worldconfig=$VSTK_WORLDCONFIG"
+fi
 
 # addModPath and addOrigin are CommandLineParser sequence options: ONE flag
 # followed by every path. Repeating the flag is a duplicate-option parse error,
