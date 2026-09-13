@@ -97,6 +97,45 @@ if [ "$MODE" = "client" ]; then
     export VSTK_SESSION_OUT="$VSTK_ROOT/run/session.json"
 fi
 
+# In client mode, let the server make the world first.
+#
+# The client creates a world when --openWorld names one that does not exist, and
+# it picks its own seed: there is no command line option for it, and
+# WorldConfig.Seed is ignored on that path. Measured, VSTK_SEED=777777 produced a
+# world reporting 327544962, and four consecutive runs produced four different
+# worlds. Every threshold test in every suite was therefore measured against
+# different terrain each run, which is a slow and confusing way to fail.
+#
+# The dedicated server does honour the seed - the same probe reports exactly
+# VSTK_SEED headless - so it creates the savegame and the client then opens it.
+# One extra boot, on the first run of a slot only.
+if [ "$MODE" = "client" ] && [ ! -f "$DATA/Saves/vstestkit.vcdbs" ]; then
+    echo "         creating the world with the server so seed=$SEED is honoured"
+    $SERVER --dataPath "$DATA" >"$VSTK_RUN/worldgen.log" 2>&1 &
+    WORLDGEN_PID=$!
+
+    for _ in $(seq 1 600); do
+        if [ -f "$DATA/Saves/vstestkit.vcdbs" ]; then break; fi
+        if ! kill -0 "$WORLDGEN_PID" 2>/dev/null; then break; fi
+        sleep 0.5
+    done
+
+    # Let it finish writing before it is stopped, or the client opens a half-made
+    # savegame and creates its own beside it.
+    sleep 3
+
+    # Every one of these is allowed to fail: common.sh runs under set -e, and a
+    # process stopped with a signal exits non-zero by definition - wait would
+    # otherwise take the whole boot down with it.
+    kill "$WORLDGEN_PID" 2>/dev/null || true
+    wait "$WORLDGEN_PID" 2>/dev/null || true
+
+    if [ ! -f "$DATA/Saves/vstestkit.vcdbs" ]; then
+        echo "warning: the server did not create a world; the client will make its own" \
+             "and its seed will not be $SEED (see $VSTK_RUN/worldgen.log)" >&2
+    fi
+fi
+
 rm -f "$DATA/.vstestkit"
 
 echo "booting  install=$VINTAGE_STORY  mode=$MODE  slot=$VSTK_SLOT"
