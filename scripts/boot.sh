@@ -114,20 +114,28 @@ if [ "$MODE" = "client" ] && [ ! -f "$DATA/Saves/vstestkit.vcdbs" ]; then
     $SERVER --dataPath "$DATA" >"$VSTK_RUN/worldgen.log" 2>&1 &
     WORLDGEN_PID=$!
 
+    # Wait for the world to be ready, not merely for the file to appear. The
+    # savegame is created long before generation settles, and stopping the server
+    # a fixed few seconds later left a different amount of world generated on each
+    # run depending on how busy the machine was - which put the nondeterminism
+    # straight back, in a form harder to see than a random seed. Ten tests failed
+    # on one run and passed on the next over the same pinned world because of it.
     for _ in $(seq 1 600); do
-        if [ -f "$DATA/Saves/vstestkit.vcdbs" ]; then break; fi
+        if grep -qE "Server now running|runphase WorldReady" "$VSTK_RUN/worldgen.log" 2>/dev/null; then break; fi
         if ! kill -0 "$WORLDGEN_PID" 2>/dev/null; then break; fi
         sleep 0.5
     done
 
-    # Let it finish writing before it is stopped, or the client opens a half-made
-    # savegame and creates its own beside it.
-    sleep 3
-
-    # Every one of these is allowed to fail: common.sh runs under set -e, and a
-    # process stopped with a signal exits non-zero by definition - wait would
-    # otherwise take the whole boot down with it.
-    kill "$WORLDGEN_PID" 2>/dev/null || true
+    # Politely, and give it time to write: a killed server leaves the savegame
+    # however it happened to be. Every call here is allowed to fail, because
+    # common.sh runs under set -e and a process stopped by a signal exits
+    # non-zero by definition - wait would otherwise take the whole boot with it.
+    kill -TERM "$WORLDGEN_PID" 2>/dev/null || true
+    for _ in $(seq 1 120); do
+        kill -0 "$WORLDGEN_PID" 2>/dev/null || break
+        sleep 0.5
+    done
+    kill -KILL "$WORLDGEN_PID" 2>/dev/null || true
     wait "$WORLDGEN_PID" 2>/dev/null || true
 
     if [ ! -f "$DATA/Saves/vstestkit.vcdbs" ]; then
