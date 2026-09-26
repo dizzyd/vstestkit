@@ -3,3 +3,4 @@ obj/
 run/
 *.user
 shots/
+__pycache__/
