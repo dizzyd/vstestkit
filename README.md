@@ -162,6 +162,12 @@ test is in scope with no configuration. Cached by snippet hash: ~150ms the first
 time, ~0ms after. A snippet may be a bare expression or a statement body; the
 evaluator tries expression form first, so you never have to say which.
 
+Result serialization permits at most 12 nested objects or arrays. A value that
+exceeds this limit is replaced in full with
+`{"truncated":true,"reason":"max_depth","maxDepth":12}`, not a partially serialized
+graph. This bounds serialization depth, not snippet execution time or collection
+size.
+
 ## The test world
 
 `boot.sh` creates a fresh world per run at a fixed seed (`VSTK_SEED`, default

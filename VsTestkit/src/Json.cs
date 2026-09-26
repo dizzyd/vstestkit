@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 Dave (Dizzy) Smith
 using System;
+using System.Globalization;
+using System.IO;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
@@ -11,9 +13,9 @@ namespace VsTestkit
     ///
     /// Game objects are hostile to reflection-based serializers: they hold
     /// back-references to the world, lazy properties that touch other threads, and
-    /// graphs deep enough to hang a serializer. So this is deliberately defensive
-    /// - loops ignored, depth capped, member errors swallowed - and anything that
-    /// still blows up degrades to ToString() instead of failing the call.
+    /// graphs deep enough to overflow the stack. Member errors and reference loops
+    /// are ignored; an over-depth value is replaced with an explicit marker rather
+    /// than returning an incomplete graph.
     /// </summary>
     public static class Json
     {
@@ -24,20 +26,51 @@ namespace VsTestkit
             Formatting = Formatting.Indented,
             ReferenceLoopHandling = ReferenceLoopHandling.Ignore,
             NullValueHandling = NullValueHandling.Include,
-            MaxDepth = MaxDepth,
             ContractResolver = new DefaultContractResolver(),
-            Error = (sender, args) => { args.ErrorContext.Handled = true; }
+            Error = (sender, args) => { args.ErrorContext.Handled = args.ErrorContext.Error is not DepthLimitException; }
         };
+
+        static readonly object Truncated = new { truncated = true, reason = "max_depth", maxDepth = MaxDepth };
+
+        static string Serialize(object value)
+        {
+            using var text = new StringWriter(CultureInfo.InvariantCulture);
+            using var writer = new DepthLimitedWriter(text);
+            JsonSerializer.Create(Settings).Serialize(writer, value);
+            return text.ToString();
+        }
+
+        // MaxDepth is a reader setting in Newtonsoft. Stop at container entry,
+        // before its members are visited, and let the error escape member recovery.
+        sealed class DepthLimitedWriter : JsonTextWriter
+        {
+            public DepthLimitedWriter(TextWriter output) : base(output) { AutoCompleteOnClose = false; }
+
+            void CheckDepth()
+            {
+                if (Top >= MaxDepth) throw new DepthLimitException();
+            }
+
+            public override void WriteStartObject() { CheckDepth(); base.WriteStartObject(); }
+            public override void WriteStartArray() { CheckDepth(); base.WriteStartArray(); }
+            public override void WriteStartConstructor(string name) { CheckDepth(); base.WriteStartConstructor(name); }
+        }
+
+        sealed class DepthLimitException : JsonSerializationException { }
 
         public static string Write(object o)
         {
             try
             {
-                return JsonConvert.SerializeObject(o, Settings);
+                return Serialize(o);
+            }
+            catch (DepthLimitException)
+            {
+                return Serialize(Truncated);
             }
             catch (Exception)
             {
-                try { return JsonConvert.SerializeObject(new { unserializable = o?.ToString() }, Settings); }
+                try { return Serialize(new { unserializable = o?.ToString() }); }
                 catch { return "{\"unserializable\":true}"; }
             }
         }
@@ -47,7 +80,7 @@ namespace VsTestkit
         /// <summary>
         /// Best-effort conversion of an arbitrary value into something that will
         /// survive the trip. Primitives pass through; everything else is attempted
-        /// as a real object graph and falls back to a type-tagged ToString().
+        /// as a real object graph, with an explicit marker when it exceeds MaxDepth.
         /// </summary>
         public static object Simplify(object value)
         {
@@ -61,8 +94,12 @@ namespace VsTestkit
                 // Round-trip through the serializer so a failure surfaces here,
                 // where we can still substitute something readable, rather than
                 // halfway through writing the response body.
-                var json = JsonConvert.SerializeObject(value, Settings);
+                var json = Serialize(value);
                 return JsonConvert.DeserializeObject(json);
+            }
+            catch (DepthLimitException)
+            {
+                return Truncated;
             }
             catch (Exception)
             {

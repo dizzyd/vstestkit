@@ -39,8 +39,42 @@ try
             throw new Exception("response no longer describes the snippet's original type");
     }
     Console.WriteLine("PASS: compiled and cached eval materialize thread-bound getters and iterators on the game thread");
+
+    CheckTruncated(Json.Write(new RecursiveResult()));
+    for (int i = 0; i < 2; i++)
+    {
+        var response = Json.Read<JObject>(Json.Write(Evaluator.Run("new RecursiveResult()", "server", 1000)));
+        CheckTruncated(response["value"]?.ToString());
+        if ((string)response["type"] != typeof(RecursiveResult).FullName)
+            throw new Exception("truncation lost the evaluated type: " + response);
+    }
+    Console.WriteLine("PASS: recursive results truncate in direct, compiled and cached serialization");
+
+    object boundary = 42;
+    for (int i = 0; i < Json.MaxDepth; i++) boundary = new[] { boundary };
+    var token = JToken.Parse(Json.Write(boundary));
+    var leaf = token;
+    for (int i = 0; i < Json.MaxDepth; i++) leaf = leaf.Single();
+    if ((int)leaf != 42) throw new Exception("the maximum permitted depth lost its value");
+    CheckTruncated(Json.Write(new[] { boundary }));
+    CheckTruncated(Json.Write(new JArray(token)));
+    Console.WriteLine("PASS: the depth boundary preserves values and rejects deeper arrays and JSON tokens");
+
+    var ordinary = Json.Read<JObject>(Json.Write(new FaultyResult()));
+    if ((int?)ordinary["Value"] != 7 || ordinary.Property("Self") != null ||
+        (int?)ordinary["AfterError"] != 9)
+        throw new Exception("loop or member-error handling lost neighboring values: " + ordinary);
+    Console.WriteLine("PASS: member errors and reference loops preserve neighboring values");
 }
 finally { queue.CompleteAdding(); thread.Join(); }
+
+static void CheckTruncated(string json)
+{
+    var result = JObject.Parse(json ?? throw new Exception("missing truncation result"));
+    if ((bool?)result["truncated"] != true || (string)result["reason"] != "max_depth" ||
+        (int?)result["maxDepth"] != Json.MaxDepth)
+        throw new Exception("expected an explicit depth-limit result: " + result);
+}
 
 public class ApiProxy : DispatchProxy
 {
@@ -61,6 +95,25 @@ public class EventProxy : DispatchProxy
 namespace VsTestkit
 {
     public static class Hub { public static ICoreServerAPI Sapi; public static ICoreClientAPI Capi; }
+    public class RecursiveResult
+    {
+        readonly int depth;
+        public RecursiveResult(int depth = 1) { this.depth = depth; }
+
+        // Keep a broken limiter from crashing the regression process itself.
+        public RecursiveResult Next => depth > Json.MaxDepth
+            ? throw new InvalidOperationException("traversed beyond the depth limit")
+            : new RecursiveResult(depth + 1);
+    }
+
+    public class FaultyResult
+    {
+        public int Value => 7;
+        public FaultyResult Self => this;
+        public int Broken => throw new InvalidOperationException("unreadable member");
+        public int AfterError => 9;
+    }
+
     public class ThreadBoundResult
     {
         readonly int owner = Environment.CurrentManagedThreadId;
