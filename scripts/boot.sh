@@ -272,7 +272,25 @@ if [ "$MODE" = "client" ]; then
         echo "         connecting to 127.0.0.1:$VSTK_GAME_PORT"
     fi
 
-    VSTESTKIT=1 nohup $CLIENT \
+    # Give the client a temp directory of its own, so it is alone in it.
+    #
+    # The client is single-instance per user: at startup it dials a named pipe,
+    # SingleInstanceVintageStoryWithUriScheme, and if another client answers, a
+    # --connect launch hands the address over and exits without writing a log.
+    # .NET puts that pipe at $TMPDIR/CoreFxPipe_<name>, so on a shared box every
+    # slot's client meets at one socket in /tmp - and a multiplayer boot made
+    # whichever client was already running leave its own world and join this
+    # peer, while this one vanished as "game exited during boot".
+    #
+    # Short and fixed rather than under $VSTK_RUN: a socket path is capped at 108
+    # bytes (104 on macOS), and the pipe name alone is 50 of them. dotnet-stack and
+    # dotnet-trace find the game's diagnostic socket here too, so run them with
+    # the same TMPDIR to attach to a test client.
+    CLIENT_TMP="/tmp/vstk-$(id -u)-$VSTK_SLOT"
+    rm -rf "$CLIENT_TMP"
+    mkdir -p "$CLIENT_TMP"
+
+    TMPDIR="$CLIENT_TMP" VSTESTKIT=1 nohup $CLIENT \
         --dataPath "$DATA" \
         "${WORLD_ARGS[@]}" \
         --addModPath "${MODPATHS[@]}" \
