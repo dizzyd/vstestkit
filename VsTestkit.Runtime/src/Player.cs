@@ -44,11 +44,24 @@ namespace VsTestkit.Testing
             await Vs.Ticks(4);
         }
 
+        /// <summary>
+        /// Sets the player's game mode through vanilla's /gamemode, so the client hears of
+        /// it as it would in play.
+        ///
+        /// The player is named in the command: Cmd runs as the console, which has no
+        /// player of its own, and /gamemode without a name looks up the caller's -
+        /// null - and throws (CmdPlayer.handleGameMode, GetClientByPlayername).
+        /// </summary>
         public static async Task SetGameMode(EnumGameMode mode)
         {
-            var r = await Vs.Cmd("/gamemode " + (mode == EnumGameMode.Creative ? "creative" : "survival"));
+            var player = Require();
+            var r = await Vs.Cmd($"/gamemode {player.PlayerName} {mode.ToString().ToLowerInvariant()}");
             if (r.Status != EnumCommandStatus.Success)
                 throw new AssertionException("could not set game mode: " + r.StatusMessage);
+
+            await Vs.Ticks(1);
+            if (player.WorldData.CurrentGameMode != mode)
+                throw new AssertionException($"game mode is {player.WorldData.CurrentGameMode} after setting it to {mode}");
         }
 
         /// <summary>Puts a stack in the active hotbar slot and selects it.</summary>

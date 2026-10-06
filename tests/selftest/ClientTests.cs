@@ -24,6 +24,39 @@ namespace VsTestkit.SelfTest
             await Task.CompletedTask;
         }
 
+        /// <summary>
+        /// Set through vanilla's /gamemode, run as the console - which once threw, the
+        /// command looking up a player name the console does not have - and heard by the
+        /// client as well as the server.
+        /// </summary>
+        [VsTest]
+        public async Task GameModeIsSetOnBothSides()
+        {
+            var was = Player.Me.WorldData.CurrentGameMode;
+            try
+            {
+                foreach (var mode in new[] { EnumGameMode.Survival, EnumGameMode.Creative })
+                {
+                    await Player.SetGameMode(mode);
+                    Assert.Equal(mode, Player.Me.WorldData.CurrentGameMode, "server");
+
+                    EnumGameMode onClient = default;
+                    for (int i = 0; i < 40 && onClient != mode; i++)
+                    {
+                        await Ticks(1);
+                        await OnClient();
+                        onClient = Capi.World.Player.WorldData.CurrentGameMode;
+                        await OnServer();
+                    }
+                    Assert.Equal(mode, onClient, "client");
+                }
+            }
+            finally
+            {
+                await Player.SetGameMode(was);
+            }
+        }
+
         [VsTest]
         public async Task PlayerIsInTheirPlot()
         {
